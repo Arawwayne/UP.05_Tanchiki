@@ -1,5 +1,5 @@
 # Import necessary libraries
-import sys, json, time
+import sys, json, time, random
 from PyQt6.QtCore import Qt, QtMsgType, QPoint, qInstallMessageHandler, QTimer, QElapsedTimer
 from PyQt6.QtGui import QIcon, QPixmap, QPainter, QColor, QPalette, QGuiApplication, QTransform
 from PyQt6.QtWidgets import (QApplication, QPushButton, QFrame, QLabel, QVBoxLayout, 
@@ -33,6 +33,7 @@ objects = {
     "wall": [1, "data/wall.png"],
     'base': [9, 'data/baza.png'],
     "tankPlayer": [11, "data/tankMain.png"],
+    "tankEnemy1": [12, 'data/Enemy1.png'],
     "bullet": [111, "data/bullet.png"],
     "tankEnemy": [12, "data/wall.png"]
 }
@@ -192,6 +193,10 @@ class GameInterface(QWidget):
                     case 11: 
                         self.tank = Tank(pos=(curRow, curCol), parent=self)
                         self.gameField.addWidget(self.tank, curRow, curCol)
+                    
+                    case 12:
+                        self.enemy = EnemyTank(pos=(curRow, curCol), parent=self)
+                        self.gameField.addWidget(self.enemy, curRow, curCol)
         
         pauseButton = ClickableImages('data/pause.png', 'pauseButton', parent = parent)
         scaling(pauseButton, 350, 150)
@@ -267,23 +272,7 @@ class Tank(QLabel):
 
             else:
                 if chosenField[newRow][newCol] == 0:
-                    chosenField[self.row][self.col] = 0
-                    chosenField[newRow][newCol] = 11
-
-                    # item1 = self.gameInterface.gameField.itemAtPosition(self.row, self.col)
-                    # item2 = self.gameInterface.gameField.itemAtPosition(newRow, newCol)
-                    
-                    # widget1 = item1.widget()
-                    # widget2 = item2.widget()
-                    
-                    # self.gameInterface.gameField.removeWidget(widget1)
-                    # self.gameInterface.gameField.removeWidget(widget2)
-                    
-                    # self.gameInterface.gameField.addWidget(widget1, newRow, newCol)
-                    # self.gameInterface.gameField.addWidget(widget2, self.row, self.col)
-                    self.gameInterface.gameField.removeWidget(self)
-                    self.row, self.col = newRow, newCol
-                    self.gameInterface.gameField.addWidget(self, self.row, self.col)
+                    self._move_to(newRow, newCol)
                 
         if key == Qt.Key.Key_Down:
             time.sleep(0.07)
@@ -300,24 +289,7 @@ class Tank(QLabel):
                 self.direction = 'south'
             else:
                 if chosenField[newRow][newCol] == 0:
-                    chosenField[self.row][self.col] = 0
-                    chosenField[newRow][newCol] = 11
-
-                    # item1 = self.gameInterface.gameField.itemAtPosition(self.row, self.col)
-                    # item2 = self.gameInterface.gameField.itemAtPosition(newRow, newCol)
-                    
-                    # widget1 = item1.widget()
-                    # widget2 = item2.widget()
-                    
-                    # self.gameInterface.gameField.removeWidget(widget1)
-                    # self.gameInterface.gameField.removeWidget(widget2)
-                    
-                    # self.gameInterface.gameField.addWidget(widget1, newRow, newCol)
-                    # self.gameInterface.gameField.addWidget(widget2, self.row, self.col)
-                    
-                    self.gameInterface.gameField.removeWidget(self)
-                    self.row, self.col = newRow, newCol
-                    self.gameInterface.gameField.addWidget(self, self.row, self.col)
+                    self._move_to(newRow, newCol)
                 
         if key == Qt.Key.Key_Left:
             time.sleep(0.07)
@@ -331,24 +303,7 @@ class Tank(QLabel):
                 self.direction = 'west'
             else:           
                 if chosenField[newRow][newCol] == 0:
-                    chosenField[self.row][self.col] = 0
-                    chosenField[newRow][newCol] = 11
-
-                    # item1 = self.gameInterface.gameField.itemAtPosition(self.row, self.col)
-                    # item2 = self.gameInterface.gameField.itemAtPosition(newRow, newCol)
-                    
-                    # widget1 = item1.widget()
-                    # widget2 = item2.widget()
-                    
-                    # self.gameInterface.gameField.removeWidget(widget1)
-                    # self.gameInterface.gameField.removeWidget(widget2)
-                    
-                    # self.gameInterface.gameField.addWidget(widget1, newRow, newCol)
-                    # self.gameInterface.gameField.addWidget(widget2, self.row, self.col)
-                    
-                    self.gameInterface.gameField.removeWidget(self)
-                    self.row, self.col = newRow, newCol
-                    self.gameInterface.gameField.addWidget(self, self.row, self.col)
+                    self._move_to(newRow, newCol)
         
         if key == Qt.Key.Key_Right:
             time.sleep(0.07)
@@ -367,30 +322,121 @@ class Tank(QLabel):
     
             else:
                 if chosenField[newRow][newCol] == 0: 
-                    chosenField[self.row][self.col] = 0
-                    chosenField[newRow][newCol] = 11
-
-                    # item1 = self.gameInterface.gameField.itemAtPosition(self.row, self.col)
-                    # item2 = self.gameInterface.gameField.itemAtPosition(newRow, newCol)
-                    
-                    # widget1 = item1.widget()
-                    # widget2 = item2.widget()
-                    
-                    # self.gameInterface.gameField.removeWidget(widget1)
-                    # self.gameInterface.gameField.removeWidget(widget2)
-                    
-                    # self.gameInterface.gameField.addWidget(widget1, newRow, newCol)
-                    # self.gameInterface.gameField.addWidget(widget2, self.row, self.col)
-                    
-                    self.gameInterface.gameField.removeWidget(self)
-                    self.row, self.col = newRow, newCol
-                    self.gameInterface.gameField.addWidget(self, self.row, self.col)     
+                    self._move_to(newRow, newCol) 
 
         if self.shot_busy == False:
             if key == Qt.Key.Key_Space:
                 Bullet3((self.row, self.col), self.direction, parent=self.gameInterface)
-            
-            
+
+
+    def _move_to(self, new_row, new_col):
+        """Перемещает танк на новую позицию"""
+        chosenField[self.row][self.col] = 0
+        chosenField[new_row][new_col] = 11
+        
+        self.gameInterface.gameField.removeWidget(self)
+        self.row, self.col = new_row, new_col
+        self.gameInterface.gameField.addWidget(self, self.row, self.col)    
+    
+    def destroy(self):
+        """Уничтожение танка"""
+        chosenField[self.row][self.col] = 0
+        self.gameInterface.gameField.removeWidget(self)
+        self.deleteLater()    
+        
+        
+class EnemyTank(QLabel):
+    def __init__(self, pos, parent=None):
+        super().__init__(parent)
+        self.gameInterface = parent
+        self.direction = random.choice(["north", "south", "west", "east"])
+        self.shotEnemy_busy = False
+        self.move_timer = QTimer()
+        self.shot_timer = QTimer()
+        
+        # Настройка внешнего вида
+        self.setPixmap(self._get_rotated_pixmap())
+        self.setScaledContents(True)
+        self.setFixedSize(60, 60)
+        
+        # Позиция на поле
+        self.row, self.col = pos
+        chosenField[self.row][self.col] = 12  # 12 - код вражеского танка
+        
+        # Таймеры для ИИ
+        self.move_timer.timeout.connect(self._ai_move)
+        self.shot_timer.timeout.connect(self._ai_shot)
+        self.move_timer.start(500)  # Движение каждые 500 мс
+        self.shot_timer.start(2000)  # Выстрел каждые 2 секунды
+    
+    def _get_rotated_pixmap(self, angle=None):
+        """Возвращает повернутое изображение танка"""
+        if angle is None:
+            angle = {
+                "north": 0,
+                "south": 180,
+                "west": 270,
+                "east": 90
+            }[self.direction]
+        
+        return rotate_pixmap(QPixmap(objects["tankEnemy1"][1]), angle)
+    
+    def _ai_move(self):
+        """ИИ для движения вражеского танка"""
+        # Случайно выбираем направление (20% chance to change)
+        if random.random() < 0.2:
+            self.direction = random.choice(["north", "south", "west", "east"])
+            self.setPixmap(self._get_rotated_pixmap())
+        
+        # Определяем новую позицию
+        if self.direction == "north":
+            new_row, new_col = self.row - 1, self.col
+        elif self.direction == "south":
+            new_row, new_col = self.row + 1, self.col
+        elif self.direction == "west":
+            new_row, new_col = self.row, self.col - 1
+        else:  # east
+            new_row, new_col = self.row, self.col + 1
+        
+        # Проверка границ и препятствий
+        if (0 <= new_row < len(chosenField)) and (0 <= new_col < len(chosenField[0])):
+            if chosenField[new_row][new_col] == 0:
+                self._move_to(new_row, new_col)
+            else:
+                # Если путь заблокирован - меняем направление
+                self.direction = random.choice(["north", "south", "west", "east"])
+                self.setPixmap(self._get_rotated_pixmap())
+        # else:
+        #     # Если достиг границы - разворачиваемся
+        #     self.direction = "south" if self.direction == "north" else \
+        #                     "north" if self.direction == "south" else \
+        #                     "east" if self.direction == "west" else "west"
+                            
+    def _move_to(self, new_row, new_col):
+        """Перемещает танк на новую позицию"""
+        chosenField[self.row][self.col] = 0
+        chosenField[new_row][new_col] = 12
+        
+        self.gameInterface.gameField.removeWidget(self)
+        self.row, self.col = new_row, new_col
+        self.gameInterface.gameField.addWidget(self, self.row, self.col)
+    
+    def _ai_shot(self):
+        """ИИ для выстрела вражеского танка"""
+        if not self.shotEnemy_busy:
+            self.shotEnemy_busy = True
+            Bullet3((self.row, self.col), self.direction, parent=self.gameInterface)
+            QTimer.singleShot(1000, lambda: setattr(self, 'shot_busy', False))
+    
+    def destroy(self):
+        """Уничтожение танка"""
+        self.move_timer.stop()
+        self.shot_timer.stop()
+        chosenField[self.row][self.col] = 0
+        self.gameInterface.gameField.removeWidget(self)
+        self.deleteLater()
+        
+                
 
 class Bullet3(QLabel):
     def __init__(self, tankPos, direction, parent=None):
@@ -483,13 +529,13 @@ class Bullet3(QLabel):
                 self.update_position()
                 return
             
-            if chosenField[new_row][new_col] > 0:
+            elif chosenField[new_row][new_col] > 0:
                 chosenField[new_row][new_col] = 0
                 item1 = self.gameInterface.gameField.itemAtPosition(new_row, new_col)
                 widget1 = item1.widget()
                 self.gameInterface.gameField.removeWidget(widget1)
                 self.gameInterface.gameField.addWidget(self.gameInterface.space, new_row, new_col)
-                return
+
             
         # Обработка столкновения (оптимизированная)
         self.cleanup()
@@ -503,6 +549,7 @@ class Bullet3(QLabel):
         chosenField[self.row][self.col] = 0
         self.deleteLater()
         self.gameInterface.tank.shot_busy = False
+        self.gameInterface.enemy.shotEnemy_busy = False
 
         
             
@@ -527,7 +574,6 @@ def rotate_pixmap(pixmap, angle):
     painter.translate(-pixmap.width() / 2, -pixmap.height() / 2)
     painter.drawPixmap(0, 0, pixmap)
     painter.end()
-    
     return rotated
 
 def handle_qt_messages(msg_type, context, message):  #QPainter ругается из-за QPixmap в setup_mainMenu, поэтому таким незамысловатым образом мы пропускаем эту ошибку. 
@@ -543,4 +589,3 @@ if __name__ == '__main__':  # нужно чтобы программа запу�
     start = WindowMain()
     start.showFullScreen()
     app.exec()
-    
