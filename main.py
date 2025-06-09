@@ -29,6 +29,7 @@ def read_from_json(filename = "data/fields.json") -> dict or list: # type: ignor
         return None
 
 objects = {
+    "void": -1,
     "air": [0, 'data/air,png'],
     "wall": [1, "data/wall.png"],
     'base': [9, 'data/baza.png'],
@@ -164,7 +165,7 @@ class GameInterface(QWidget):
         mainLayout = QHBoxLayout()
         self.gameField = QGridLayout()
         interface = QVBoxLayout()
-        
+        self.has_enemy = False
         for curRow in range(rows):
             for curCol in range(collumns):
                 match chosenField[curRow][curCol]:
@@ -197,7 +198,7 @@ class GameInterface(QWidget):
                     case 12:
                         self.enemy = EnemyTank(pos=(curRow, curCol), parent=self)
                         self.gameField.addWidget(self.enemy, curRow, curCol)
-        
+                        self.has_enemy = True
         pauseButton = ClickableImages('data/pause.png', 'pauseButton', parent = parent)
         scaling(pauseButton, 350, 150)
         pauseButton.setScaledContents(True)
@@ -508,7 +509,7 @@ class Bullet3(QLabel):
         new_row, new_col = self.row + dr, self.col + dc
         
         #Быстрая проверка границ
-        if (0 <= new_row < len(chosenField)) and (0 <= new_col < len(chosenField[0])):
+        if (0 <= new_row < len(chosenField)-1) and (0 <= new_col < len(chosenField[0])-1):
             if chosenField[new_row][new_col] == 0:
                 # Быстрое перемещение
                 self.gameInterface.gameField.removeWidget(self)
@@ -536,7 +537,6 @@ class Bullet3(QLabel):
                 self.gameInterface.gameField.removeWidget(widget1)
                 self.gameInterface.gameField.addWidget(self.gameInterface.space, new_row, new_col)
 
-            
         # Обработка столкновения (оптимизированная)
         self.cleanup()
     
@@ -549,7 +549,9 @@ class Bullet3(QLabel):
         chosenField[self.row][self.col] = 0
         self.deleteLater()
         self.gameInterface.tank.shot_busy = False
-        self.gameInterface.enemy.shotEnemy_busy = False
+        if self.gameInterface.has_enemy == True:
+            self.gameInterface.enemy.shotEnemy_busy = False
+        
 
         
             
@@ -584,6 +586,7 @@ qInstallMessageHandler(handle_qt_messages)
 
 
 # Старт самой программы (святыня) (НЕ ТРОГАТЬ!!!)        
+
 if __name__ == '__main__':  # нужно чтобы программа запускалась именно из этого файла, а не из других. Типо инкапсуляция.
     app = QApplication(sys.argv)
     start = WindowMain()
