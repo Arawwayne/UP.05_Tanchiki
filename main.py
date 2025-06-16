@@ -427,7 +427,7 @@ class EnemyTank(QLabel):
         if not self.shotEnemy_busy:
             self.shotEnemy_busy = True
             Bullet3((self.row, self.col), self.direction, parent=self.gameInterface)
-            QTimer.singleShot(1000, lambda: setattr(self, 'shot_busy', False))
+            QTimer.singleShot(5000, lambda: setattr(self, 'shot_busy', False))
     
     def destroy(self):
         """Уничтожение танка"""
@@ -530,12 +530,15 @@ class Bullet3(QLabel):
                 self.update_position()
                 return
             
-            elif chosenField[new_row][new_col] > 0:
+            elif chosenField[new_row][new_col] == 1:
                 chosenField[new_row][new_col] = 0
                 item1 = self.gameInterface.gameField.itemAtPosition(new_row, new_col)
                 widget1 = item1.widget()
                 self.gameInterface.gameField.removeWidget(widget1)
                 self.gameInterface.gameField.addWidget(self.gameInterface.space, new_row, new_col)
+                
+            elif chosenField[new_row][new_col] == 12:
+                self.gameInterface.enemy.destroy()
 
         # Обработка столкновения (оптимизированная)
         self.cleanup()
@@ -554,7 +557,7 @@ class Bullet3(QLabel):
         
 
         
-            
+        
 def scaling(image, w, h):
     image = image
     screen = QGuiApplication.primaryScreen()
