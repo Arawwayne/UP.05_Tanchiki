@@ -99,7 +99,7 @@ class GameInterface(QWidget):
         pauseButton.setScaledContents(True)
         interface.addWidget(pauseButton, alignment=Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop)
         
-        self.gameField.setSpacing(0)
+        self.gameField.setSpacing(0) 
         mainLayout.addLayout(self.gameField)
         mainLayout.addLayout(interface)
         self.setLayout(mainLayout)
