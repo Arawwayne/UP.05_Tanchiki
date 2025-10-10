@@ -1,6 +1,6 @@
-import sys, json, time, random
+import sys, json, time, random, os
 from PyQt6.QtCore import Qt, QtMsgType, QPoint, qInstallMessageHandler, QTimer, QElapsedTimer
-from PyQt6.QtGui import QIcon, QPixmap, QPainter, QColor, QPalette, QGuiApplication, QTransform
+from PyQt6.QtGui import QIcon, QPixmap, QPainter, QColor, QPalette, QGuiApplication, QTransform, QKeyEvent
 from PyQt6.QtWidgets import (QApplication, QPushButton, QFrame, QLabel, QVBoxLayout, 
                              QWidget, QStackedWidget, QMainWindow, QHBoxLayout, QGridLayout,
                              QSpacerItem, QSizePolicy)
@@ -38,7 +38,6 @@ field = read_from_json()
 
 chosenField = field['field1']
 
-Keys = [Qt.Key.Key_Up, Qt.Key.Key_Down, Qt.Key.Key_Left, Qt.Key.Key_Right, Qt.Key.Key_Space]
 
 class WindowMain(QMainWindow):
     def __init__(self):
@@ -52,16 +51,26 @@ class WindowMain(QMainWindow):
         self.setWindowIcon(QIcon('data/logo.ico'))
 
         self.game = GameInterface(parent=self)
-
+        self.menu = Menu(parent=self)
         self.setCentralWidget(self.game)
+
+    def keyPressEvent(self, e):
+        self.game.tank._keyPressEvent(e)
+        return super().keyPressEvent(e)
+        
+
+class Menu(QWidget):
+    def __init__(self, parent = None):
+        super().__init__(parent)
+
+        self.varWindowMain = parent
+
+
+        self.mainLayout = QVBoxLayout
 
 class GameInterface(QWidget):
     def __init__(self, parent = None):
         super().__init__(parent)
-
-        ingame_objects = {
-    
-        }
 
         mainLayout = QHBoxLayout()
         self.gameField = QGridLayout()
@@ -70,12 +79,12 @@ class GameInterface(QWidget):
         for curRow in range(rows):
             for curCol in range(collumns):
                 match chosenField[curRow][curCol]:
-                    case 0: 
-                        self.space = QLabel()
-                        self.space.setPixmap(QPixmap(objects["air"][1]))
-                        self.space.setScaledContents(True)
-                        # space = QSpacerItem(60, 60, QSizePolicy.Policy.Fixed)
-                        self.gameField.addWidget(self.space, curRow, curCol)
+                    # case 0: 
+                    #     self.space = QLabel()
+                    #     self.space.setPixmap(QPixmap(objects["air"][1]))
+                    #     self.space.setScaledContents(True)
+                    #     # space = QSpacerItem(60, 60, QSizePolicy.Policy.Fixed)
+                    #     self.gameField.addWidget(self.space, curRow, curCol)
                         
                     case 1: 
                         wall = QLabel()
@@ -92,8 +101,6 @@ class GameInterface(QWidget):
                     case 11: 
                         self.tank = Tank(pos=(curRow, curCol), parent=self) 
                         self.gameField.addWidget(self.tank, curRow, curCol)
-                        ingame_objects['tankPlayer'] = self.tank
-                        print(ingame_objects)
 
         pauseButton = ClickableImages('data/pause.png', 'pauseButton', parent = parent)
         pauseButton.setScaledContents(True)
@@ -104,8 +111,19 @@ class GameInterface(QWidget):
         mainLayout.addLayout(interface)
         self.setLayout(mainLayout)
 
+
+
 class Tank(QLabel):
     def __init__(self, pos, parent=None):
+
+        self.Keys = {
+            Qt.Key.Key_Up: (self.move, 'north'),
+            Qt.Key.Key_Down: (self.move, 'south'),
+            Qt.Key.Key_Left: (self.move, 'west'),
+            Qt.Key.Key_Right: (self.move, 'east'),
+            Qt.Key.Key_Space: self.shoot
+        }
+
         super().__init__(parent)
         self.gameInterface = parent
         self.direction = "north"
@@ -114,19 +132,62 @@ class Tank(QLabel):
         self.setScaledContents(True)
         self.row, self.col = pos
 
-    def move(self):
-        
-        self.move(1000, 1000)
+    def move(self, direction):
+        match direction:
+            case 'north':
+                new_row, new_col = self.row - 1, self.col
+                self.direction = 'north'
 
+                if chosenField[new_row][new_col] == 0:
+                    self.gameInterface.gameField.addWidget(self, new_row, new_col)
+                    self.setPixmap(rotate_pixmap(QPixmap(objects["tankPlayer"][1]), 0))
 
+            case 'east':
+                new_row, new_col = self.row, self.col + 1
+                self.direction = 'east'
+
+                if chosenField[new_row][new_col] == 0:
+                    self.gameInterface.gameField.addWidget(self, new_row, new_col)
+                    self.setPixmap(rotate_pixmap(QPixmap(objects["tankPlayer"][1]), 90))
+
+            case 'south':
+                new_row, new_col = self.row + 1, self.col
+                self.direction = 'south'
+
+                if chosenField[new_row][new_col] == 0:
+                    self.gameInterface.gameField.addWidget(self, new_row, new_col)
+                    self.setPixmap(rotate_pixmap(QPixmap(objects["tankPlayer"][1]), 180))
+  
+            case 'west':
+                new_row, new_col = self.row, self.col - 1
+                self.direction = 'west'
+
+                if chosenField[new_row][new_col] == 0:
+                    self.gameInterface.gameField.addWidget(self, new_row, new_col)
+                    self.setPixmap(rotate_pixmap(QPixmap(objects["tankPlayer"][1]), 270))
+
+        chosenField[self.row][self.col] = 0
+        chosenField[new_row][new_col] = 11
+        self.row, self.col = new_row, new_col        
+            
+        os.system('cls' if os.name == 'nt' else 'clear')
+        for i in chosenField:
+            for j in i:
+                print(j, end='  ')
+            print()
+
+    def shoot(self, direction):
+        return
 
     def destroy(self):
-        if 'tankPlayer' in self.gameInterface.ingame_objects:
-            self.gameInterface.gameField.removeWidget(self.gameInterface.ingame_objects["tankPlayer"])
-            self.gameInterface.ingame_objects["tankPlayer"].deleteLater()
-            self.gameInterface.ingame_objects.pop('tankPlayer')
-            print('tank destroyed')
+        return
+    
+    def _keyPressEvent(self, e):
+        key = e.key()
+        if key in self.Keys:
+            self.Keys[key][0](self.Keys[key][1])
 
+    
 class ClickableImages(QLabel):
     def __init__(self, image, senderName, parent = None):    
         super().__init__(parent)
@@ -146,6 +207,17 @@ class ClickableImages(QLabel):
         if senderName == 'pauseButton':
             self.main.close()
 
+def rotate_pixmap(pixmap, angle):
+    rotated = QPixmap(pixmap)
+    rotated.fill(Qt.GlobalColor.transparent)  # Прозрачный фон
+    
+    painter = QPainter(rotated)
+    painter.translate(rotated.width() / 2, rotated.height() / 2)
+    painter.rotate(angle)
+    painter.translate(-pixmap.width() / 2, -pixmap.height() / 2)
+    painter.drawPixmap(0, 0, pixmap)
+    painter.end()
+    return rotated
 
 
 def handle_qt_messages(msg_type, context, message):  #QPainter ругается из-за QPixmap в setup_mainMenu, поэтому таким незамысловатым образом мы пропускаем эту ошибку. 
