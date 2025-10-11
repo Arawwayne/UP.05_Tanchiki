@@ -31,6 +31,13 @@ objects = {
     "tankEnemy": [12, "data/wall.png"]
 }
 
+directions = {
+    'north': 0,
+    'east': 90,
+    'south': 180,
+    'west': 270
+}
+
 rows = 18
 collumns = 25
 
@@ -115,6 +122,7 @@ class GameInterface(QWidget):
 
 class Tank(QLabel):
     def __init__(self, pos, parent=None):
+        super().__init__(parent)
 
         self.Keys = {
             Qt.Key.Key_Up: (self.move, 'north'),
@@ -124,10 +132,10 @@ class Tank(QLabel):
             Qt.Key.Key_Space: self.shoot
         }
 
-        super().__init__(parent)
         self.gameInterface = parent
         self.direction = "north"
         self.shot_busy = False
+        self.health = 3
         self.setPixmap(QPixmap(objects["tankPlayer"][1]))
         self.setScaledContents(True)
         self.row, self.col = pos
@@ -138,38 +146,26 @@ class Tank(QLabel):
                 new_row, new_col = self.row - 1, self.col
                 self.direction = 'north'
 
-                if chosenField[new_row][new_col] == 0:
-                    self.gameInterface.gameField.addWidget(self, new_row, new_col)
-                    self.setPixmap(rotate_pixmap(QPixmap(objects["tankPlayer"][1]), 0))
-
             case 'east':
                 new_row, new_col = self.row, self.col + 1
                 self.direction = 'east'
 
-                if chosenField[new_row][new_col] == 0:
-                    self.gameInterface.gameField.addWidget(self, new_row, new_col)
-                    self.setPixmap(rotate_pixmap(QPixmap(objects["tankPlayer"][1]), 90))
-
             case 'south':
                 new_row, new_col = self.row + 1, self.col
                 self.direction = 'south'
-
-                if chosenField[new_row][new_col] == 0:
-                    self.gameInterface.gameField.addWidget(self, new_row, new_col)
-                    self.setPixmap(rotate_pixmap(QPixmap(objects["tankPlayer"][1]), 180))
   
             case 'west':
                 new_row, new_col = self.row, self.col - 1
                 self.direction = 'west'
 
-                if chosenField[new_row][new_col] == 0:
-                    self.gameInterface.gameField.addWidget(self, new_row, new_col)
-                    self.setPixmap(rotate_pixmap(QPixmap(objects["tankPlayer"][1]), 270))
+        if chosenField[new_row][new_col] == 0:
+            self.gameInterface.gameField.addWidget(self, new_row, new_col)
+            chosenField[self.row][self.col] = 0
+            chosenField[new_row][new_col] = 11
+            self.row, self.col = new_row, new_col        
 
-        chosenField[self.row][self.col] = 0
-        chosenField[new_row][new_col] = 11
-        self.row, self.col = new_row, new_col        
-            
+        self.setPixmap(rotate_pixmap(QPixmap(objects["tankPlayer"][1]), directions[self.direction]))
+
         os.system('cls' if os.name == 'nt' else 'clear')
         for i in chosenField:
             for j in i:
@@ -177,7 +173,7 @@ class Tank(QLabel):
             print()
 
     def shoot(self, direction):
-        return
+        bullet = Bullet('player', self.direction, parent=self.gameInterface)
 
     def destroy(self):
         return
@@ -187,7 +183,23 @@ class Tank(QLabel):
         if key in self.Keys:
             self.Keys[key][0](self.Keys[key][1])
 
-    
+class Bullet(QLabel):
+    def __init__(self, owner, direction, parent=None):
+        super().__init__(parent)
+
+        self.gameInterface = parent
+        self.owner = owner
+        self.direction = direction
+
+        self.setPixmap(rotate_pixmap(QPixmap(objects['bullet'][1]), directions[self.direction]))
+        self.setScaledContents(True)
+
+        
+
+
+
+
+
 class ClickableImages(QLabel):
     def __init__(self, image, senderName, parent = None):    
         super().__init__(parent)
