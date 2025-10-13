@@ -32,11 +32,23 @@ objects = {
 }
 
 directions = {
-    'north': 0,
-    'east': 90,
-    'south': 180,
-    'west': 270
+    'north': [0, (-1, 0)],
+    'east': [90, (0, 1)],
+    'south': [180, (1, 0)],
+    'west': [270, (0, -1)],
 }
+
+moveKeys = {
+    Qt.Key.Key_Up: 'north',
+    Qt.Key.Key_Right: 'east',
+    Qt.Key.Key_Down: 'south', 
+    Qt.Key.Key_Left: 'west'
+}
+
+actionKeys = {
+    Qt.Key.Key_Space
+}
+            
 
 rows = 18
 collumns = 25
@@ -69,15 +81,15 @@ class WindowMain(QMainWindow):
 class Menu(QWidget):
     def __init__(self, parent = None):
         super().__init__(parent)
-
         self.varWindowMain = parent
-
-
         self.mainLayout = QVBoxLayout
+
 
 class GameInterface(QWidget):
     def __init__(self, parent = None):
         super().__init__(parent)
+
+        self.fieldObjects = []
 
         mainLayout = QHBoxLayout()
         self.gameField = QGridLayout()
@@ -92,12 +104,11 @@ class GameInterface(QWidget):
                     #     self.space.setScaledContents(True)
                     #     # space = QSpacerItem(60, 60, QSizePolicy.Policy.Fixed)
                     #     self.gameField.addWidget(self.space, curRow, curCol)
-                        
+                    
                     case 1: 
-                        wall = QLabel()
-                        wall.setPixmap(QPixmap(objects["wall"][1]))
-                        wall.setScaledContents(True)
-                        self.gameField.addWidget(wall, curRow, curCol)
+                        self.wall = Wall(parent=self)
+                        self.gameField.addWidget(self.wall, curRow, curCol)
+                        self.fieldObjects.append(self.wall)
                     
                     case 9:
                         base = QLabel()
@@ -118,86 +129,99 @@ class GameInterface(QWidget):
         mainLayout.addLayout(interface)
         self.setLayout(mainLayout)
 
+        
 
+class Wall(QLabel):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+
+        self.gameInterface = parent
+        self.setPixmap(QPixmap(objects["wall"][1]))
+        self.setScaledContents(True)
+    
+    def destroyed(self):
+        self.deleteLater()
+        self = None
+        
 
 class Tank(QLabel):
     def __init__(self, pos, parent=None):
         super().__init__(parent)
 
-        self.Keys = {
-            Qt.Key.Key_Up: (self.move, 'north'),
-            Qt.Key.Key_Down: (self.move, 'south'),
-            Qt.Key.Key_Left: (self.move, 'west'),
-            Qt.Key.Key_Right: (self.move, 'east'),
-            Qt.Key.Key_Space: self.shoot
-        }
-
         self.gameInterface = parent
         self.direction = "north"
         self.shot_busy = False
         self.health = 3
+        
         self.setPixmap(QPixmap(objects["tankPlayer"][1]))
         self.setScaledContents(True)
         self.row, self.col = pos
 
     def move(self, direction):
-        match direction:
-            case 'north':
-                new_row, new_col = self.row - 1, self.col
-                self.direction = 'north'
+        r, c = directions[direction][1]
+        new_row, new_col = self.row + r, self.col + c
 
-            case 'east':
-                new_row, new_col = self.row, self.col + 1
-                self.direction = 'east'
-
-            case 'south':
-                new_row, new_col = self.row + 1, self.col
-                self.direction = 'south'
-  
-            case 'west':
-                new_row, new_col = self.row, self.col - 1
-                self.direction = 'west'
-
-        if chosenField[new_row][new_col] == 0:
+        if chosenField[new_row][new_col] == 0 and direction == self.direction:
             self.gameInterface.gameField.addWidget(self, new_row, new_col)
             chosenField[self.row][self.col] = 0
             chosenField[new_row][new_col] = 11
             self.row, self.col = new_row, new_col        
 
-        self.setPixmap(rotate_pixmap(QPixmap(objects["tankPlayer"][1]), directions[self.direction]))
+        self.setPixmap(rotate_pixmap(QPixmap(objects["tankPlayer"][1]), directions[direction][0]))
+        self.direction = direction
 
-        os.system('cls' if os.name == 'nt' else 'clear')
-        for i in chosenField:
-            for j in i:
-                print(j, end='  ')
-            print()
+# ОЧИСТКА ТЕРМИНАЛА И ВЫВОД МАТРИЦЫ
+        # os.system('cls' if os.name == 'nt' else 'clear')
+        # for i in chosenField:
+        #     for j in i:
+        #         print(j, end='  ')
+        #     print()
 
     def shoot(self, direction):
-        bullet = Bullet('player', self.direction, parent=self.gameInterface)
+        bullet = Bullet(self, self.direction, pos=(self.row, self.col), parent=self.gameInterface)
+        bullet._move()
 
-    def destroy(self):
+    def destroyed(self):
         return
     
     def _keyPressEvent(self, e):
         key = e.key()
-        if key in self.Keys:
-            self.Keys[key][0](self.Keys[key][1])
+        if key in moveKeys:
+            self.move(moveKeys[key])
+        elif key in actionKeys:
+            self.shoot(self.direction)
 
 class Bullet(QLabel):
-    def __init__(self, owner, direction, parent=None):
+    def __init__(self, owner, direction, pos, parent=None):
         super().__init__(parent)
 
         self.gameInterface = parent
         self.owner = owner
         self.direction = direction
+        self.row, self.col = pos
+        self.r, self.c = directions[self.direction][1]
+        self.row, self.col = self.row + self.r, self.col + self.c
 
-        self.setPixmap(rotate_pixmap(QPixmap(objects['bullet'][1]), directions[self.direction]))
+        self.shot_timer = QTimer(self)
+        self.shot_timer.timeout.connect(self._move)
+        self.shot_timer.start(100)
+
+        self.setPixmap(rotate_pixmap(QPixmap(objects['bullet'][1]), directions[self.direction][0]))
         self.setScaledContents(True)
 
+    def _move(self):
+        new_row, new_col = self.row, self.col
+        if chosenField[new_row][new_col] == 0:
+            self.gameInterface.gameField.addWidget(self, new_row, new_col)
+            chosenField[new_row][new_col] = 111
+            chosenField[self.row][self.col] = 0
+            self.row, self.col = self.row + self.r, self.col + self.c
+            return
+        elif (widget := find_widget(self.gameInterface.gameField, new_row, new_col)) in self.gameInterface.fieldObjects:
+            widget.destroyed()
+            chosenField[new_row][new_col] = 0
+        self.deleteLater()
         
-
-
-
 
 
 class ClickableImages(QLabel):
@@ -219,6 +243,7 @@ class ClickableImages(QLabel):
         if senderName == 'pauseButton':
             self.main.close()
 
+
 def rotate_pixmap(pixmap, angle):
     rotated = QPixmap(pixmap)
     rotated.fill(Qt.GlobalColor.transparent)  # Прозрачный фон
@@ -230,6 +255,26 @@ def rotate_pixmap(pixmap, angle):
     painter.drawPixmap(0, 0, pixmap)
     painter.end()
     return rotated
+
+def find_widget(layout, row, column):
+    """Найти виджет по позиции (строка, колонка)"""
+    item = layout.itemAtPosition(row, column)
+    if item and item.widget():
+        return item.widget()
+
+def get_widgets(layout):
+        """Получить все виджеты из QGridLayout"""
+        widgets = []
+        for i in range(layout.count()):
+            item = layout.itemAt(i)
+            if item.widget():
+                widgets.append(item.widget())
+        
+        print(f"Найдено виджетов: {len(widgets)}")
+        for widget in widgets:
+            if type(widget).__name__ == 'Tank':
+                print(f"Виджет: {widget}, Тип: {type(widget).__name__}")
+
 
 
 def handle_qt_messages(msg_type, context, message):  #QPainter ругается из-за QPixmap в setup_mainMenu, поэтому таким незамысловатым образом мы пропускаем эту ошибку. 
