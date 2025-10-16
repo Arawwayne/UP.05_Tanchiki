@@ -29,7 +29,17 @@ objects = {
     'base': [9, 'data/baza.png'],
     "tankPlayer": [10, "data/tankMain.png"],
     "tankEnemy": [11, 'data/Enemy1.png'],
-    "bullet": [111, "data/bullet.png"]
+    "bullet": [111, "data/bullet.png"],
+}
+
+pictures = {
+    'play': 'data/playButton.png',
+    'exit': 'data/exitButton.png',
+    'replay': 'data/replayButton.png',
+    'title': 'data/title.png',
+    'pause': 'data/pause.png',
+    'pause_title': 'data/pause_title.png',
+    'home': 'data/home.png',
 }
 
 # Направления движения с их углами поворота и координатами передвижения по полю
@@ -70,25 +80,32 @@ class WindowMain(QMainWindow):
         super().__init__()
         
         # Создаём заголовок окна, его геометрию и иконку.
+        screen_width, screen_height = app.primaryScreen().size().width(), app.primaryScreen().size().height()
+
         self.setWindowTitle("TANKS")
         paletTe = app.palette()
         paletTe.setColor(QPalette.ColorRole.Window, QColor("#353232"))
         self.setPalette(paletTe)
         self.setWindowIcon(QIcon('data/logo.ico'))
+        #self.setFixedSize(screen_width, screen_height)
 
         self.pagesStack = QStackedWidget()
+        self.pagesStack.setFixedSize(screen_width, screen_height)
 
         # Определяем формы и вносим их в стэк
         self.menu = Menu(parent=self)
+        self.pause = PauseScreen(parent=self)
+        self.win = WinScreen(parent=self)
         self.game = GameInterface(parent=self)
-        self.end = EndScreen(parent=self)
 
         self.pagesStack.addWidget(self.menu)
+        self.pagesStack.addWidget(self.pause)
+        self.pagesStack.addWidget(self.win)
         self.pagesStack.addWidget(self.game)
-        self.pagesStack.addWidget(self.end)
 
         # Вставляем стэк в рамку. Тк меню был введён в стэк первым, то оно и будет показываться
         self.setCentralWidget(self.pagesStack)
+        self.pagesStack.setCurrentIndex(2)
 
     def reset_game(self):
         reset_game_state()
@@ -96,20 +113,219 @@ class WindowMain(QMainWindow):
         self.pagesStack.removeWidget(self.game)
         self.game.deleteLater()
         self.game = new_game
-        self.pagesStack.insertWidget(1, self.game)
-        self.pagesStack.setCurrentIndex(1)
+        self.pagesStack.addWidget(self.game)
+        self.pagesStack.setCurrentIndex(self.pagesStack.count() - 1)
 
     # Обработка нажатия клавиш, которая передаётся в класс Tank
     def keyPressEvent(self, e):
         self.game.tank._keyPressEvent(e)
         return super().keyPressEvent(e)
 
-
+    
 # Меню
 class Menu(QWidget):
     def __init__(self, parent = None):
         super().__init__(parent)
         
+        self.main = parent
+        self.setup_ui()
+
+    def setup_ui(self):
+        mainLayout = QVBoxLayout()
+        ro1 = QGridLayout()
+        row2 = QHBoxLayout()
+        
+        
+        title = QLabel()
+        title.setPixmap(QPixmap(pictures['title']))
+        scaling(title, 1000, 200)
+        title.setScaledContents(True)
+        
+        exitButton = ClickableImages(pictures['exit'], 'exit', parent = self.main)
+        scaling(exitButton, 200, 200)
+        exitButton.setScaledContents(True)
+        
+        startButton = ClickableImages(pictures['play'], "play", parent = self.main)
+        scaling(startButton, 500, 500)
+        startButton.setScaledContents(True)
+
+        ro1.addWidget(title, 1, 0, alignment=Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop)
+        ro1.addWidget(exitButton, 0, 0, alignment=Qt.AlignmentFlag.AlignRight)
+        
+        row2.addWidget(startButton)
+        
+        mainLayout.addLayout(ro1)
+        mainLayout.addLayout(row2)
+        self.setLayout(mainLayout)
+        
+
+class Endcreen(QWidget):
+    def __init__(self, parent = None):
+        super().__init__(parent)
+        
+        self.main = parent
+        self.setup_ui()
+
+    def setup_ui(self, state):
+        self.mainLayout = QVBoxLayout()
+        stats_buttons_row = QHBoxLayout()
+        
+        # Заголовок с поражением/победой
+
+        lose = QLabel()
+        lose.setPixmap(QPixmap('data/lose.png'))       
+        scaling(lose, 1000, 200)       
+        lose.setScaledContents(True)
+        
+        # Фреймы со статистикой
+        frame_kills = QFrame()
+        frame_kills.setFixedSize(600, 600)
+        frame_kills.setFrameStyle(QFrame.Shape.Box | QFrame.Shadow.Raised)
+        frame_kills.setLineWidth(2)
+        frame_kills.setMidLineWidth(3)
+
+        frame_pickups = QFrame()
+        frame_pickups.setFixedSize(600, 600)
+        frame_pickups.setFrameStyle(QFrame.Shape.Box | QFrame.Shadow.Raised)
+        frame_pickups.setLineWidth(2)
+        frame_pickups.setMidLineWidth(3)
+
+        frame_kills_layout = QVBoxLayout()
+        frame_kills_layout.addWidget(QLabel('TANK KILLS – 10000'))
+        frame_kills_layout.addWidget(QLabel('YOU WIN'))
+        frame_kills_layout.addWidget(QLabel('YAHOOOO'))
+
+        frame_layout = QVBoxLayout()
+        frame_layout.addWidget(QLabel('TANK KILLS – xd'))
+        frame_layout.addWidget(QLabel('YOU LOSE'))
+        frame_layout.addWidget(QLabel('WAHOOOO'))
+
+        frame_kills.setLayout(frame_kills_layout)
+        frame_pickups.setLayout(frame_layout)
+
+        # Кнопки
+        homeButton = ClickableImages(pictures['home'], 'home', parent = self.main)
+        scaling(homeButton, 200, 200)
+        homeButton.setScaledContents(True)
+
+        replayButton = ClickableImages(pictures['replay'], "replay", parent = self.main)
+        scaling(replayButton, 200, 200)
+        replayButton.setScaledContents(True)
+
+        buttons1_layout = QHBoxLayout()
+
+        buttons1_layout.addWidget(replayButton)
+        buttons1_layout.addWidget(homeButton)
+
+        # Вставляем всё что надо
+        self.mainLayout.addWidget(lose)
+        self.mainLayout.addLayout(stats_buttons_row)
+
+        stats_buttons_row.addWidget(frame_kills)
+        stats_buttons_row.addWidget(frame_pickups)
+        stats_buttons_row.addLayout(buttons1_layout)
+
+
+        self.mainLayout.addWidget(frame_kills)
+        self.setLayout(self.mainLayout)
+
+    def clear_layout(self):
+    # Универсальная функция для очистки любого layout
+        if self.mainLayout is not None:
+            while self.mainLayout.count():
+                child = self.mainLayout.takeAt(0)
+                if child.widget():
+                    child.widget().deleteLater()
+                elif child.self.mainLayout():
+                    self.clear_layout(child.self.mainLayout())  # Рекурсия для вложенных layouts
+
+
+class WinScreen(QWidget):
+    def __init__(self, parent = None):
+        super().__init__(parent)
+        
+        self.main = parent
+        mainLayout = QVBoxLayout()
+        stats_buttons_row = QHBoxLayout()
+        
+        # Заголовок с поражением/победой 
+        win = QLabel()
+        win.setPixmap(QPixmap('data/win.png'))       
+        scaling(win, 1000, 200)       
+        win.setScaledContents(True)
+        
+        # Фреймы со статистикой
+        frame_kills = QFrame()
+        frame_kills.setFixedSize(600, 600)
+        frame_kills.setFrameStyle(QFrame.Shape.Box | QFrame.Shadow.Raised)
+        frame_kills.setLineWidth(2)
+        frame_kills.setMidLineWidth(3)
+
+        frame_pickups = QFrame()
+        frame_pickups.setFixedSize(600, 600)
+        frame_pickups.setFrameStyle(QFrame.Shape.Box | QFrame.Shadow.Raised)
+        frame_pickups.setLineWidth(2)
+        frame_pickups.setMidLineWidth(3)
+
+        frame_kills_layout = QVBoxLayout()
+        frame_kills_layout.addWidget(QLabel('TANK KILLS – 10000'))
+        frame_kills_layout.addWidget(QLabel('YOU WIN'))
+        frame_kills_layout.addWidget(QLabel('YAHOOOO'))
+
+        frame_layout = QVBoxLayout()
+        frame_layout.addWidget(QLabel('TANK KILLS – xd'))
+        frame_layout.addWidget(QLabel('YOU LOSE'))
+        frame_layout.addWidget(QLabel('WAHOOOO'))
+
+        frame_kills.setLayout(frame_kills_layout)
+        frame_pickups.setLayout(frame_layout)
+
+        # Кнопки
+        homeButton = ClickableImages(pictures['home'], 'home', parent = parent)
+        scaling(homeButton, 200, 200)
+        homeButton.setScaledContents(True)
+        
+        startButton = ClickableImages(pictures['play'], "play", parent = parent)
+        scaling(startButton, 200, 200)
+        startButton.setScaledContents(True)
+
+        replayButton = ClickableImages(pictures['replay'], "replay", parent = parent)
+        scaling(replayButton, 200, 200)
+        replayButton.setScaledContents(True)
+
+        buttons_layout = QVBoxLayout()
+        buttons1_layout = QHBoxLayout()
+
+        buttons1_layout.addWidget(startButton)
+        buttons1_layout.addWidget(replayButton)
+        buttons_layout.addLayout(buttons1_layout)
+
+        buttons_layout.addWidget(homeButton, alignment=Qt.AlignmentFlag.AlignCenter)
+        
+
+        # Вставляем всё что надо
+        mainLayout.addWidget(win)
+        mainLayout.addLayout(stats_buttons_row)
+
+        stats_buttons_row.addWidget(frame_kills)
+        stats_buttons_row.addWidget(frame_pickups)
+        stats_buttons_row.addLayout(buttons_layout)
+
+
+        mainLayout.addWidget(frame_kills)
+        self.setLayout(mainLayout)
+
+        # winlose2 = QLabel()
+        # winlose2.setPixmap(QPixmap('data/win.png'))
+        # scaling(winlose2, 1000, 200)
+        # winlose2.setScaledContents(True)
+        # mainLayout.addWidget(winlose2)
+
+
+class PauseScreen(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+
         self.main = parent
         mainLayout = QVBoxLayout()
         row1 = QHBoxLayout()
@@ -118,48 +334,33 @@ class Menu(QWidget):
         
         
         title = QLabel()
-        title.setPixmap(QPixmap("data/title.png"))
+        title.setPixmap(QPixmap(pictures['pause_title']))
         scaling(title, 1000, 200)
-        #title.setFixedSize(1000, 280)
-        #title.setAlignment(Qt.AlignmentFlag.AlignCenter) 
         title.setScaledContents(True)
         
-        exitButton = ClickableImages("data/exitButton.png", "exitButton", parent = parent)
-        scaling(exitButton, 200, 200)
-        #exitButton.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignTop) 
-        #exitButton.setFixedSize(200, 200)
-        exitButton.setScaledContents(True)
-        
-        startButton = ClickableImages("data/playButton.png", "startButton", parent = parent)
+        startButton = ClickableImages(pictures['play'], 'resume', parent = self.main)
         scaling(startButton, 500, 500)
         startButton.setScaledContents(True)
-        
-        
-        #row1.addWidget(title)
-        #row1.addWidget(exitButton)
+
+        homeButton = ClickableImages(pictures['home'], 'home', parent = self.main)
+        scaling(homeButton, 200, 200)
+        homeButton.setScaledContents(True)
+
+        replayButton = ClickableImages(pictures['replay'], "replay", parent = self.main)
+        scaling(replayButton, 500, 500)
+        replayButton.setScaledContents(True)
+
         ro1.addWidget(title, 1, 0, alignment=Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop)
-        ro1.addWidget(exitButton, 0, 0, alignment=Qt.AlignmentFlag.AlignRight)
+        ro1.addWidget(homeButton, 0, 0, alignment=Qt.AlignmentFlag.AlignRight)
         
         row2.addWidget(startButton)
+        row2.addWidget(replayButton)
         
         
         #mainLayout.addLayout(row1)
         mainLayout.addLayout(ro1)
         mainLayout.addLayout(row2)
         self.setLayout(mainLayout)
-        
-
-class EndScreen(QWidget):
-    def __init__(self, parent = None):
-        super().__init__(parent)
-        
-        self.main = parent
-        mainLayout = QVBoxLayout()
-        stats_buttons_row = QHBoxLayout
-
-        winlose = QLabel()
-        
-
 
 
 # Класс игрового интерфейса. Здесь будет очерчено игровое поле с помощью матрицы и UI по состоянию и возможностям игрока
@@ -169,9 +370,11 @@ class GameInterface(QWidget):
 
         self.fieldObjects = []
         self.enemies = []
+        self.timers = []
     
         mainLayout = QHBoxLayout()
         self.gameField = QGridLayout()
+        self.gameField.setSpacing(0) 
         interface = QVBoxLayout()
 
         # Сканируем матрицу и в соответствии с ней, отображаем объекты на поле
@@ -181,6 +384,7 @@ class GameInterface(QWidget):
                     # case 0: 
                     #     self.space = QLabel()
                     #     self.space.setPixmap(QPixmap(objects["air"][1]))
+                    #     scaling(self.space, 60, 60)
                     #     self.space.setScaledContents(True)
                     #     # space = QSpacerItem(60, 60, QSizePolicy.Policy.Fixed)
                     #     self.gameField.addWidget(self.space, curRow, curCol)
@@ -209,16 +413,16 @@ class GameInterface(QWidget):
                         self.gameField.addWidget(self.enemy, curRow, curCol)
                         self.enemies.append(self.enemy)
 
-        pauseButton = ClickableImages('data/pause.png', 'pauseButton', parent = parent)
+        pauseButton = ClickableImages(pictures['pause'], 'pause', parent = parent)
+        scaling(pauseButton, 200, 600)
         pauseButton.setScaledContents(True)
         interface.addWidget(pauseButton, alignment=Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop)
         
-        self.gameField.setSpacing(0) 
         mainLayout.addLayout(self.gameField)
         mainLayout.addLayout(interface)
         self.setLayout(mainLayout)
 
-        
+
 class Wall(QLabel):
     def __init__(self, unbreakble=False, parent=None):
         super().__init__(parent)
@@ -278,7 +482,8 @@ class Tank(QLabel):
             self.destroyed()     
 
     def destroyed(self):
-        return
+        self.gameInterface.main.reset_game()
+        self.gameInterface.main.setCurrentIndex(3)
     
     def _keyPressEvent(self, e):
         key = e.key()
@@ -298,10 +503,11 @@ class Bullet(QLabel):
         self.row, self.col = pos
         self.r, self.c = directions[self.direction][1]
         self.row, self.col = self.row + self.r, self.col + self.c
+        self.speed = 40
 
         self.speed_timer = QTimer(self)
         self.speed_timer.timeout.connect(self._move)
-        self.speed_timer.start(40)  # CКОРОСТЬ ПУЛИ В МС
+        self.speed_timer.start(self.speed)  # CКОРОСТЬ ПУЛИ В МС
 
         self.setPixmap(rotate_pixmap(QPixmap(objects['bullet'][1]), directions[self.direction][0]))
         scaling(self, 30, 30)
@@ -330,6 +536,11 @@ class Bullet(QLabel):
         self.deleteLater()
         self.owner.shot_busy = False
     
+    def pause(self, state: bool):
+        if state:
+            self.speed_timer.stop()
+        else:
+            self.speed_timer.start(self.speed)
 
 
 class EnemyTank(QLabel):
@@ -342,6 +553,8 @@ class EnemyTank(QLabel):
         self.direction = random.choices(self.dir_list)[0]
         self.shot_busy = False
         self.health = 1
+        self.speed = 100
+        self.shot_freq = 100
         
         self.setPixmap(rotate_pixmap(QPixmap(objects["tankEnemy"][1]), directions[self.direction][0]))
         scaling(self, 60, 60)
@@ -349,14 +562,18 @@ class EnemyTank(QLabel):
         self.row, self.col = pos
 
         self.move_timer = QTimer()
+        self.gameInterface.timers.append(self.move_timer)
         self.shot_timer = QTimer()
 
         self.move_timer.timeout.connect(self.move)
         self.shot_timer.timeout.connect(self.shoot)
-        self.move_timer.start(100)
-        self.shot_timer.start(100)
+        self.move_timer.start(self.speed)
+        self.shot_timer.start(self.shot_freq)
+
 
     def move(self):
+        weights = [10, 30, 50, 10]
+        
         self.direction = random.choices(self.dir_list)[0]
 
         r, c = directions[self.direction][1]
@@ -380,6 +597,14 @@ class EnemyTank(QLabel):
         if self.health == 0:
             self.destroyed()       
 
+    def pause(self, state):
+        if state:
+            self.move_timer.stop()
+            self.shot_timer.stop()
+        else:
+            self.move_timer.start(self.speed)
+            self.shot_timer.start(self.shot_freq)
+
     def destroyed(self):
         self.deleteLater()
         self.gameInterface.enemies.remove(self)
@@ -402,12 +627,21 @@ class ClickableImages(QLabel):
             self.on_click(self.senderName)  # Вызываем свою функцию
 
     def on_click(self, senderName):
-        if senderName == 'pauseButton':
-            self.main.pagesStack.setCurrentIndex(0)
-        elif senderName == 'startButton':
+        if senderName == 'pause':
             self.main.pagesStack.setCurrentIndex(1)
+            #self.main.game.
+        elif senderName == 'resume':
+            self.main.pagesStack.setCurrentIndex(self.main.pagesStack.count()-1)
+        elif senderName == 'home':
+            self.main.pagesStack.setCurrentIndex(0)
+        elif senderName == 'replay':
+            self.main.pause.clear_layout()
+            # self.main.pagesStack.setCurrentIndex(self.main.pagesStack.count()-1)
+            # self.main.reset_game()
+        elif senderName == 'play':
+            self.main.pagesStack.setCurrentIndex(self.main.pagesStack.count()-1)
             self.main.reset_game()
-        elif senderName == 'exitButton':
+        elif senderName == 'exit':
             self.main.close()
 
 
@@ -417,6 +651,7 @@ def reset_game_state():
     if field is None:
         return
     chosenField = field.get(field_key, chosenField)
+
 
 def rotate_pixmap(pixmap, angle):
     rotated = QPixmap(pixmap)
@@ -477,10 +712,11 @@ def handle_qt_messages(msg_type, context, message):  #QPainter ругается 
     print(message)  # Выводим остальные сообщения
 qInstallMessageHandler(handle_qt_messages)
 
-# Старт самой программы (святыня) (НЕ ТРОГАТЬ!!!)        
 
+# Старт самой программы (святыня) (НЕ ТРОГАТЬ!!!)        
 if __name__ == '__main__':  # нужно чтобы программа запускалась именно из этого файла, а не из других. Типо инкапсуляция.
     app = QApplication(sys.argv)
     start = WindowMain()
+    #start.show()
     start.showFullScreen()
     app.exec()
