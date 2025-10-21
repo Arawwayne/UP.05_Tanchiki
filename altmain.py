@@ -5,6 +5,16 @@ from PyQt6.QtWidgets import (QApplication, QPushButton, QFrame, QLabel, QVBoxLay
                              QWidget, QStackedWidget, QMainWindow, QHBoxLayout, QGridLayout,
                              QSpacerItem, QSizePolicy)
 
+
+"""
+3 макета карты, 
+4 усиления (вместе с картинками): неуязвимость на несколько секунд; пробивающие стены снаряды; двойной урон у снарядов; дополнительная жизнь.
+появление врагов с переодичностью в шесть секунд, 
+статистика боя, 
+пауза
+"""
+
+
 # Функция для чтения json файла, в котором находится макет (матрица) игрового поля
 def read_from_json(filename = "data/fields.json") -> dict or list: # type: ignore
     try:
@@ -21,17 +31,45 @@ def read_from_json(filename = "data/fields.json") -> dict or list: # type: ignor
         return None
 
 # Объекты с ссылками на их изображения
-objects = {
-    "void": -1,
-    "air": [0, 'data/air,png'],
-    "wall": [1, "data/wall.png"],
-    "unWall": [8, 'data/unWall.png'],
-    'base': [9, 'data/baza.png'],
-    "tankPlayer": [10, "data/tankMain.png"],
-    "tankEnemy": [11, 'data/Enemy1.png'],
-    "bullet": [111, "data/bullet.png"],
+objects_pics = {
+    "bullet": "data/bullet.png",
+    "wall1": "data/wall.png",
+    "wall2": "data/wall2.png",
+    'water': 'data/water.png',
+    'bush': 'data/bush.png',
+    "unWall": 'data/unWall.png',
+    'base': 'data/baza.png',
+    "tankPlayer": "data/tankMain.png",
+    "tankEnemy1": 'data/Enemy1.png',
+    "tankEnemy2": 'data/Enemy2.png',
+    "tankEnemy3": 'data/Enemy3.png',
+    "tankEnemy4": 'data/Enemy4.png',
 }
 
+solid_objects = {
+    "wall1": 1,
+    'wall2': 2,
+    "unWall": 8,
+    'base': 9, 
+    "tankPlayer": 10, 
+    "bullet": 111,
+}
+
+nonsolid_objects = {
+    'air': 0,
+    'water': 3,
+    'bush': 4,
+}
+
+
+enemies_objects = {
+    "tankEnemy1": 11,
+    "tankEnemy2": 12,
+    "tankEnemy3": 13,
+    "tankEnemy4": 14,
+}
+
+# Картинки с ссылками на их изображения
 pictures = {
     'play': 'data/playButton.png',
     'exit': 'data/exitButton.png',
@@ -40,6 +78,8 @@ pictures = {
     'pause': 'data/pause.png',
     'pause_title': 'data/pause_title.png',
     'home': 'data/home.png',
+    'win': 'data/win.png',
+    'lose': 'data/lose.png',
 }
 
 # Направления движения с их углами поворота и координатами передвижения по полю
@@ -62,7 +102,7 @@ moveKeys = {
 actionKeys = {
     Qt.Key.Key_Space
 }
-            
+
 # Матрица поля 18 на 25
 rows = 18
 collumns = 25
@@ -74,8 +114,7 @@ field_key = 'field1'
 chosenField = field[field_key]
 
 
-# Класс главного окна или рамки, в которую мы будем вставлять виджет с формой меню или игрового интерфейса
-class WindowMain(QMainWindow):
+class WindowMain(QMainWindow):  # Класс главного окна или рамки, в которую мы будем вставлять виджет с формой меню или игрового интерфейса
     def __init__(self):
         super().__init__()
         
@@ -95,17 +134,17 @@ class WindowMain(QMainWindow):
         # Определяем формы и вносим их в стэк
         self.menu = Menu(parent=self)
         self.pause = PauseScreen(parent=self)
-        self.win = WinScreen(parent=self)
+        self.end = EndScreen(parent=self)
         self.game = GameInterface(parent=self)
 
         self.pagesStack.addWidget(self.menu)
         self.pagesStack.addWidget(self.pause)
-        self.pagesStack.addWidget(self.win)
+        self.pagesStack.addWidget(self.end)
         self.pagesStack.addWidget(self.game)
 
         # Вставляем стэк в рамку. Тк меню был введён в стэк первым, то оно и будет показываться
         self.setCentralWidget(self.pagesStack)
-        self.pagesStack.setCurrentIndex(2)
+        self.pagesStack.setCurrentIndex(0)
 
     def reset_game(self):
         reset_game_state()
@@ -116,18 +155,28 @@ class WindowMain(QMainWindow):
         self.pagesStack.addWidget(self.game)
         self.pagesStack.setCurrentIndex(self.pagesStack.count() - 1)
 
-    # Обработка нажатия клавиш, которая передаётся в класс Tank
-    def keyPressEvent(self, e):
+    def end_state(self, win:bool):
+        new_end = EndScreen(win, parent=self)
+        self.pagesStack.removeWidget(self.end)
+        self.end.deleteLater()
+        self.end = new_end
+        self.pagesStack.insertWidget(2, self.end)
+        self.pagesStack.setCurrentIndex(2)
+        
+
+    def keyPressEvent(self, e):  # Обработка нажатия клавиш, которая передаётся в класс Tank
         self.game.tank._keyPressEvent(e)
         return super().keyPressEvent(e)
 
-    
-# Меню
-class Menu(QWidget):
+
+class Menu(QWidget):  # Меню
     def __init__(self, parent = None):
         super().__init__(parent)
         
         self.main = parent
+        self.title_pixmap = QPixmap(pictures['title'])
+        self.exit_pixmap = QPixmap(pictures['exit'])
+        self.start_pixmap = QPixmap(pictures['play'])
         self.setup_ui()
 
     def setup_ui(self):
@@ -135,17 +184,16 @@ class Menu(QWidget):
         ro1 = QGridLayout()
         row2 = QHBoxLayout()
         
-        
         title = QLabel()
-        title.setPixmap(QPixmap(pictures['title']))
+        title.setPixmap(self.title_pixmap)
         scaling(title, 1000, 200)
         title.setScaledContents(True)
         
-        exitButton = ClickableImages(pictures['exit'], 'exit', parent = self.main)
+        exitButton = ClickableImages(self.exit_pixmap, 'exit', parent = self.main)
         scaling(exitButton, 200, 200)
         exitButton.setScaledContents(True)
         
-        startButton = ClickableImages(pictures['play'], "play", parent = self.main)
+        startButton = ClickableImages(self.start_pixmap, "play", parent = self.main)
         scaling(startButton, 500, 500)
         startButton.setScaledContents(True)
 
@@ -157,25 +205,24 @@ class Menu(QWidget):
         mainLayout.addLayout(ro1)
         mainLayout.addLayout(row2)
         self.setLayout(mainLayout)
-        
 
-class Endcreen(QWidget):
-    def __init__(self, parent = None):
+
+class EndScreen(QWidget):  # Экран конца игры. Если победа, то показывает победу, если поражение – соответсвенно
+    def __init__(self, win=None, parent = None):
         super().__init__(parent)
         
         self.main = parent
-        self.setup_ui()
+        self.home_pixmap = QPixmap(pictures['home'])
+        self.replay_pixmap = QPixmap(pictures['replay'])
+        self.lose_pixmap = QPixmap(pictures['lose'])
+        self.win_pixmap = QPixmap(pictures['win'])
+        self.next_pixmap = QPixmap(pictures['play'])
 
-    def setup_ui(self, state):
+        self.setup_ui(win)
+
+    def setup_ui(self, win):
         self.mainLayout = QVBoxLayout()
         stats_buttons_row = QHBoxLayout()
-        
-        # Заголовок с поражением/победой
-
-        lose = QLabel()
-        lose.setPixmap(QPixmap('data/lose.png'))       
-        scaling(lose, 1000, 200)       
-        lose.setScaledContents(True)
         
         # Фреймы со статистикой
         frame_kills = QFrame()
@@ -204,29 +251,49 @@ class Endcreen(QWidget):
         frame_pickups.setLayout(frame_layout)
 
         # Кнопки
-        homeButton = ClickableImages(pictures['home'], 'home', parent = self.main)
+        homeButton = ClickableImages(self.home_pixmap, 'home', parent = self.main)
         scaling(homeButton, 200, 200)
         homeButton.setScaledContents(True)
 
-        replayButton = ClickableImages(pictures['replay'], "replay", parent = self.main)
+        replayButton = ClickableImages(self.replay_pixmap, "replay", parent = self.main)
         scaling(replayButton, 200, 200)
         replayButton.setScaledContents(True)
 
+        buttons_layout = QVBoxLayout()
         buttons1_layout = QHBoxLayout()
 
+        buttons_layout.addLayout(buttons1_layout)
         buttons1_layout.addWidget(replayButton)
         buttons1_layout.addWidget(homeButton)
 
+
+        if not win:
+            # Заголовок с поражением/победой
+            title = QLabel()
+            title.setPixmap(self.lose_pixmap)       
+            scaling(title, 1000, 200)       
+            title.setScaledContents(True)
+        else:
+            title = QLabel()
+            title.setPixmap(self.win_pixmap)       
+            scaling(title, 1000, 200)       
+            title.setScaledContents(True)
+
+            nextButton = ClickableImages(self.next_pixmap, "resume", parent = self.main)
+            scaling(nextButton, 500, 500)
+            nextButton.setScaledContents(True)
+
+            buttons_layout.addWidget(nextButton)
+
         # Вставляем всё что надо
-        self.mainLayout.addWidget(lose)
+        self.mainLayout.addWidget(title)
         self.mainLayout.addLayout(stats_buttons_row)
+
 
         stats_buttons_row.addWidget(frame_kills)
         stats_buttons_row.addWidget(frame_pickups)
-        stats_buttons_row.addLayout(buttons1_layout)
+        stats_buttons_row.addLayout(buttons_layout)
 
-
-        self.mainLayout.addWidget(frame_kills)
         self.setLayout(self.mainLayout)
 
     def clear_layout(self):
@@ -240,107 +307,28 @@ class Endcreen(QWidget):
                     self.clear_layout(child.self.mainLayout())  # Рекурсия для вложенных layouts
 
 
-class WinScreen(QWidget):
-    def __init__(self, parent = None):
-        super().__init__(parent)
-        
-        self.main = parent
-        mainLayout = QVBoxLayout()
-        stats_buttons_row = QHBoxLayout()
-        
-        # Заголовок с поражением/победой 
-        win = QLabel()
-        win.setPixmap(QPixmap('data/win.png'))       
-        scaling(win, 1000, 200)       
-        win.setScaledContents(True)
-        
-        # Фреймы со статистикой
-        frame_kills = QFrame()
-        frame_kills.setFixedSize(600, 600)
-        frame_kills.setFrameStyle(QFrame.Shape.Box | QFrame.Shadow.Raised)
-        frame_kills.setLineWidth(2)
-        frame_kills.setMidLineWidth(3)
-
-        frame_pickups = QFrame()
-        frame_pickups.setFixedSize(600, 600)
-        frame_pickups.setFrameStyle(QFrame.Shape.Box | QFrame.Shadow.Raised)
-        frame_pickups.setLineWidth(2)
-        frame_pickups.setMidLineWidth(3)
-
-        frame_kills_layout = QVBoxLayout()
-        frame_kills_layout.addWidget(QLabel('TANK KILLS – 10000'))
-        frame_kills_layout.addWidget(QLabel('YOU WIN'))
-        frame_kills_layout.addWidget(QLabel('YAHOOOO'))
-
-        frame_layout = QVBoxLayout()
-        frame_layout.addWidget(QLabel('TANK KILLS – xd'))
-        frame_layout.addWidget(QLabel('YOU LOSE'))
-        frame_layout.addWidget(QLabel('WAHOOOO'))
-
-        frame_kills.setLayout(frame_kills_layout)
-        frame_pickups.setLayout(frame_layout)
-
-        # Кнопки
-        homeButton = ClickableImages(pictures['home'], 'home', parent = parent)
-        scaling(homeButton, 200, 200)
-        homeButton.setScaledContents(True)
-        
-        startButton = ClickableImages(pictures['play'], "play", parent = parent)
-        scaling(startButton, 200, 200)
-        startButton.setScaledContents(True)
-
-        replayButton = ClickableImages(pictures['replay'], "replay", parent = parent)
-        scaling(replayButton, 200, 200)
-        replayButton.setScaledContents(True)
-
-        buttons_layout = QVBoxLayout()
-        buttons1_layout = QHBoxLayout()
-
-        buttons1_layout.addWidget(startButton)
-        buttons1_layout.addWidget(replayButton)
-        buttons_layout.addLayout(buttons1_layout)
-
-        buttons_layout.addWidget(homeButton, alignment=Qt.AlignmentFlag.AlignCenter)
-        
-
-        # Вставляем всё что надо
-        mainLayout.addWidget(win)
-        mainLayout.addLayout(stats_buttons_row)
-
-        stats_buttons_row.addWidget(frame_kills)
-        stats_buttons_row.addWidget(frame_pickups)
-        stats_buttons_row.addLayout(buttons_layout)
-
-
-        mainLayout.addWidget(frame_kills)
-        self.setLayout(mainLayout)
-
-        # winlose2 = QLabel()
-        # winlose2.setPixmap(QPixmap('data/win.png'))
-        # scaling(winlose2, 1000, 200)
-        # winlose2.setScaledContents(True)
-        # mainLayout.addWidget(winlose2)
-
-
-class PauseScreen(QWidget):
+class PauseScreen(QWidget):  # Пауза
     def __init__(self, parent=None):
         super().__init__(parent)
 
         self.main = parent
         mainLayout = QVBoxLayout()
-        row1 = QHBoxLayout()
         ro1 = QGridLayout()
         row2 = QHBoxLayout()
         
+        self.title_pixmap = QPixmap(pictures['pause_title'])
+        self.resume_pixmap = QPixmap(pictures['play'])
+        self.home_pixmap = QPixmap(pictures['home'])
+        self.replay_pixmap = QPixmap(pictures['replay'])
         
         title = QLabel()
         title.setPixmap(QPixmap(pictures['pause_title']))
         scaling(title, 1000, 200)
         title.setScaledContents(True)
         
-        startButton = ClickableImages(pictures['play'], 'resume', parent = self.main)
-        scaling(startButton, 500, 500)
-        startButton.setScaledContents(True)
+        resumeButton = ClickableImages(pictures['play'], 'resume', parent = self.main)
+        scaling(resumeButton, 500, 500)
+        resumeButton.setScaledContents(True)
 
         homeButton = ClickableImages(pictures['home'], 'home', parent = self.main)
         scaling(homeButton, 200, 200)
@@ -353,7 +341,7 @@ class PauseScreen(QWidget):
         ro1.addWidget(title, 1, 0, alignment=Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop)
         ro1.addWidget(homeButton, 0, 0, alignment=Qt.AlignmentFlag.AlignRight)
         
-        row2.addWidget(startButton)
+        row2.addWidget(resumeButton)
         row2.addWidget(replayButton)
         
         
@@ -363,15 +351,18 @@ class PauseScreen(QWidget):
         self.setLayout(mainLayout)
 
 
-# Класс игрового интерфейса. Здесь будет очерчено игровое поле с помощью матрицы и UI по состоянию и возможностям игрока
-class GameInterface(QWidget):
+class GameInterface(QWidget):  # Класс игрового интерфейса. Здесь будет очерчено игровое поле с помощью матрицы и UI по состоянию и возможностям игрока
     def __init__(self, parent = None):
         super().__init__(parent)
 
         self.fieldObjects = []
+        self.fieldNonObjects = []
         self.enemies = []
         self.timers = []
-    
+
+        self.pause_pixmap = QPixmap(pictures['pause'])
+
+        self.main = parent
         mainLayout = QHBoxLayout()
         self.gameField = QGridLayout()
         self.gameField.setSpacing(0) 
@@ -383,37 +374,69 @@ class GameInterface(QWidget):
                 match chosenField[curRow][curCol]:
                     # case 0: 
                     #     self.space = QLabel()
-                    #     self.space.setPixmap(QPixmap(objects["air"][1]))
+                    #     self.space.setPixmap(objects_pics["air"][1])
                     #     scaling(self.space, 60, 60)
                     #     self.space.setScaledContents(True)
                     #     # space = QSpacerItem(60, 60, QSizePolicy.Policy.Fixed)
                     #     self.gameField.addWidget(self.space, curRow, curCol)
                     
-                    case 1: 
-                        self.wall = Wall(parent=self)
+                    case x if x == solid_objects['wall1']: 
+                        self.wall = Wall1(pos=(curRow, curCol), parent=self)
+                        self.gameField.addWidget(self.wall, curRow, curCol)
+                        self.fieldObjects.append(self.wall)
+
+                    case x if x == solid_objects['wall2']: 
+                        self.wall = Wall2(pos=(curRow, curCol), parent=self)
                         self.gameField.addWidget(self.wall, curRow, curCol)
                         self.fieldObjects.append(self.wall)
                     
-                    case 8: 
-                        self.unWall = Wall(parent=self, unbreakble=True)
+                    case x if x == solid_objects['unWall']: 
+                        self.unWall = Wall3(parent=self)
                         self.gameField.addWidget(self.unWall, curRow, curCol)
                     
-                    case 9:
+                    case x if x == nonsolid_objects['bush']:
+                        self.bush = Bush(pos=(curRow, curCol), parent=self)
+                        self.gameField.addWidget(self.bush, curRow, curCol)
+                        self.fieldNonObjects.append(self.bush)
+
+                    case x if x == nonsolid_objects['water']:
+                        self.water = Water(pos=(curRow, curCol), parent=self)
+                        self.gameField.addWidget(self.water, curRow, curCol)
+                        self.fieldNonObjects.append(self.water)
+
+
+                    case x if x == solid_objects['base']:
                         base = QLabel()
-                        base.setPixmap(QPixmap(objects["base"][1]))
+                        base.setPixmap(QPixmap(objects_pics['base']))
                         base.setScaledContents(True)
                         self.gameField.addWidget(base, curRow, curCol)
 
-                    case 10: 
+                    case x if x == solid_objects['tankPlayer']: 
                         self.tank = Tank(pos=(curRow, curCol), parent=self) 
                         self.gameField.addWidget(self.tank, curRow, curCol)
 
-                    case 11:
-                        self.enemy = EnemyTank(pos=(curRow, curCol), parent=self)
+                    case x if x == enemies_objects['tankEnemy1']:
+                        self.enemy = EnemyTank1(pos=(curRow, curCol), parent=self)
                         self.gameField.addWidget(self.enemy, curRow, curCol)
                         self.enemies.append(self.enemy)
+                    
+                    case x if x == enemies_objects['tankEnemy2']:
+                        self.enemy2 = EnemyTank2(pos=(curRow, curCol), parent=self)
+                        self.gameField.addWidget(self.enemy2, curRow, curCol)
+                        self.enemies.append(self.enemy2)
+                
+                    case x if x == enemies_objects['tankEnemy3']:
+                        self.enemy3 = EnemyTank3(pos=(curRow, curCol), parent=self)
+                        self.gameField.addWidget(self.enemy3, curRow, curCol)
+                        self.enemies.append(self.enemy3)
 
-        pauseButton = ClickableImages(pictures['pause'], 'pause', parent = parent)
+                    case x if x == enemies_objects['tankEnemy4']:
+                        self.enemy4 = EnemyTank4(pos=(curRow, curCol), parent=self)
+                        self.gameField.addWidget(self.enemy4, curRow, curCol)
+                        self.enemies.append(self.enemy4)
+
+
+        pauseButton = ClickableImages(self.pause_pixmap, 'pause', parent = self.main)
         scaling(pauseButton, 200, 600)
         pauseButton.setScaledContents(True)
         interface.addWidget(pauseButton, alignment=Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop)
@@ -423,22 +446,77 @@ class GameInterface(QWidget):
         self.setLayout(mainLayout)
 
 
-class Wall(QLabel):
-    def __init__(self, unbreakble=False, parent=None):
+class Bush(QLabel):
+    def __init__(self, pos=None, parent=None):
         super().__init__(parent)
         self.gameInterface = parent
-        if unbreakble:
-            self.setPixmap(QPixmap(objects["unWall"][1]))
-        else:
-            self.setPixmap(QPixmap(objects["wall"][1]))
+        self.row, self.col = pos
+
+        self.bush_pixmap = QPixmap(objects_pics['bush'])
+        self.setPixmap(self.bush_pixmap)
         scaling(self, 60, 60)
         self.setScaledContents(True)
-    
+
+
+class Water(QLabel):
+    def __init__(self, pos=None, parent=None):
+        super().__init__(parent)
+        self.gameInterface = parent
+        self.row, self.col = pos
+
+        self.water_pixmap = QPixmap(objects_pics['water'])
+        self.setPixmap(self.water_pixmap)
+        scaling(self, 60, 60)
+        self.setScaledContents(True)
+
+
+class Wall(QLabel):
+    def __init__(self, pos=None, parent=None):
+        super().__init__(parent)
+        self.gameInterface = parent
+        self.row, self.col = pos
+
+    def health_down(self):
+        self.health -= 1
+        chosenField[self.row][self.col] = 0
+        if self.health == 0:
+            self.destroyed()       
+
     def destroyed(self):
         self.deleteLater()
         self.gameInterface.fieldObjects.remove(self)
         self = None
-        
+
+class Wall1(Wall):
+    def __init__(self, pos, parent=None):
+        super().__init__(pos, parent)
+        self.health = 1
+        self.row, self.col = pos
+
+        self.wall_pixmap = QPixmap(objects_pics['wall1'])
+        self.setPixmap(self.wall_pixmap)
+        scaling(self, 60, 60)
+        self.setScaledContents(True)
+      
+class Wall2(QLabel):
+    def __init__(self, pos, parent=None):
+        super().__init__(pos, parent)
+        self.health = 2
+        self.row, self.col = pos
+
+        self.wall_pixmap = QPixmap(objects_pics['wall2'])
+        self.setPixmap(self.wall_pixmap)
+        scaling(self, 60, 60)
+        self.setScaledContents(True)
+
+class Wall3(QLabel):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.wall_pixmap = QPixmap(objects_pics['unWall'])
+        self.setPixmap(self.wall_pixmap)
+        scaling(self, 60, 60)
+        self.setScaledContents(True)
+
 
 class Tank(QLabel):
     def __init__(self, pos, parent=None):
@@ -448,28 +526,38 @@ class Tank(QLabel):
         self.direction = "north"
         self.shot_busy = False
         self.health = 3
+        self.tank_pixmap = QPixmap(objects_pics['tankPlayer'])
         
-        self.setPixmap(QPixmap(objects["tankPlayer"][1]))
+        self.setPixmap(self.tank_pixmap)
         scaling(self, 60, 60)
         self.setScaledContents(True)
         self.row, self.col = pos
 
         self.move_timer = QTimer()
         self.move_timer.timeout.connect(lambda: self.move(self.direction))
+        self.gameInterface.timers.append(self.move_timer)
+
+        self.cell_new = 0
 
     def move(self, direction):
-        
+        self.setVisible(True)
         r, c = directions[direction][1]
         new_row, new_col = self.row + r, self.col + c
 
-        if chosenField[new_row][new_col] == 0 and direction == self.direction:
+
+        if (chosenField[new_row][new_col] in list(nonsolid_objects.values()) and chosenField[new_row][new_col] != nonsolid_objects['water']) and direction == self.direction:
             self.gameInterface.gameField.addWidget(self, new_row, new_col)
-            chosenField[self.row][self.col] = 0
-            chosenField[new_row][new_col] = 11
+            chosenField[self.row][self.col] = self.cell_new
+            self.cell_new = chosenField[new_row][new_col]
+            chosenField[new_row][new_col] = solid_objects['tankPlayer']
             self.row, self.col = new_row, new_col        
 
-        self.setPixmap(rotate_pixmap(QPixmap(objects["tankPlayer"][1]), directions[direction][0]))
-        self.direction = direction
+        if self.cell_new == 4:
+            self.setVisible(False)
+
+        self.setPixmap(rotate_pixmap(self.tank_pixmap, directions[direction][0]))
+        self.direction = direction 
+
 
     def shoot(self):
         if not self.shot_busy:
@@ -482,9 +570,8 @@ class Tank(QLabel):
             self.destroyed()     
 
     def destroyed(self):
-        self.gameInterface.main.reset_game()
-        self.gameInterface.main.setCurrentIndex(3)
-    
+        self.gameInterface.main.end_state(False)
+
     def _keyPressEvent(self, e):
         key = e.key()
         if key in moveKeys:
@@ -503,13 +590,15 @@ class Bullet(QLabel):
         self.row, self.col = pos
         self.r, self.c = directions[self.direction][1]
         self.row, self.col = self.row + self.r, self.col + self.c
-        self.speed = 40
+        self.speed = 50
+        self.bullet_pixmap = QPixmap(objects_pics['bullet'])
 
         self.speed_timer = QTimer(self)
-        self.speed_timer.timeout.connect(self._move)
+        self.speed_timer.timeout.connect(self._move)                                                                                                                                                                                                                                                                                                                                                                
+
         self.speed_timer.start(self.speed)  # CКОРОСТЬ ПУЛИ В МС
 
-        self.setPixmap(rotate_pixmap(QPixmap(objects['bullet'][1]), directions[self.direction][0]))
+        self.setPixmap(rotate_pixmap(self.bullet_pixmap, directions[self.direction][0]))
         scaling(self, 30, 30)
         self.setScaledContents(True)
         # self.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -517,10 +606,10 @@ class Bullet(QLabel):
     def _move(self):
         self.owner.shot_busy = True
         new_row, new_col = self.row, self.col
-        if chosenField[new_row][new_col] == 0:
+        if chosenField[new_row][new_col] in list(nonsolid_objects.values()):
             self.gameInterface.gameField.addWidget(self, new_row, new_col, alignment=Qt.AlignmentFlag.AlignCenter)
-            chosenField[new_row][new_col] = 111
-            chosenField[self.row][self.col] = 0
+            # chosenField[new_row][new_col] = 111
+            # chosenField[self.row][self.col] = 0
             self.row, self.col = self.row + self.r, self.col + self.c
             return
         else:
@@ -528,11 +617,12 @@ class Bullet(QLabel):
 
     def collision(self, new_row, new_col):
         if (widget := find_widget(self.gameInterface.gameField, new_row, new_col)) in self.gameInterface.fieldObjects:
-            widget.destroyed()
-            chosenField[new_row][new_col] = 0
-        elif (widget := find_widget(self.gameInterface.gameField, new_row, new_col)) in self.gameInterface.enemies:
             widget.health_down()
-            chosenField[new_row][new_col] = 0
+        elif self.owner == self.gameInterface.tank:
+            if (widget := find_widget(self.gameInterface.gameField, new_row, new_col)) in self.gameInterface.enemies:
+                widget.health_down()
+        elif widget == self.gameInterface.tank:
+            widget.health_down()
         self.deleteLater()
         self.owner.shot_busy = False
     
@@ -547,46 +637,33 @@ class EnemyTank(QLabel):
     def __init__(self, pos, parent=None):
         super().__init__(parent)
 
-        self.dir_list = ['north', 'east', 'south', 'west']
-
         self.gameInterface = parent
-        self.direction = random.choices(self.dir_list)[0]
-        self.shot_busy = False
-        self.health = 1
-        self.speed = 100
-        self.shot_freq = 100
-        
-        self.setPixmap(rotate_pixmap(QPixmap(objects["tankEnemy"][1]), directions[self.direction][0]))
-        scaling(self, 60, 60)
-        self.setScaledContents(True)
         self.row, self.col = pos
-
-        self.move_timer = QTimer()
-        self.gameInterface.timers.append(self.move_timer)
-        self.shot_timer = QTimer()
-
-        self.move_timer.timeout.connect(self.move)
-        self.shot_timer.timeout.connect(self.shoot)
-        self.move_timer.start(self.speed)
-        self.shot_timer.start(self.shot_freq)
-
+        self.cell_new = 0
 
     def move(self):
-        weights = [10, 30, 50, 10]
-        
-        self.direction = random.choices(self.dir_list)[0]
+        self.setVisible(True)
+        weights = [10, 10, 10, 10]
+        weights[self.dir_list.index(self.direction)] = 90
+        self.direction = random.choices(self.dir_list, weights=weights, k=1)[0]
 
         r, c = directions[self.direction][1]
         new_row, new_col = self.row + r, self.col + c
 
-        if chosenField[new_row][new_col] == 0 and self.direction == self.direction:
+        if (chosenField[new_row][new_col] in list(nonsolid_objects.values()) and chosenField[new_row][new_col] != nonsolid_objects['water']):
             self.gameInterface.gameField.addWidget(self, new_row, new_col)
-            chosenField[self.row][self.col] = 0
+            chosenField[self.row][self.col] = self.cell_new
+            self.cell_new = chosenField[new_row][new_col]
             chosenField[new_row][new_col] = 11
             self.row, self.col = new_row, new_col
+        
+        if self.cell_new == 4:
+            self.setVisible(False)
+        # elif chosenField[new_row][new_col] in list(solid_objects.values()):
+        #     self.setPixmap(rotate_pixmap(QPixmap(objects_pics["tankEnemy"]), directions[self.dir_list[self.dir_list.index(self.direction) - 1]][0]))
 
-        self.setPixmap(rotate_pixmap(QPixmap(objects["tankEnemy"][1]), directions[self.direction][0]))
-
+        self.setPixmap(rotate_pixmap(self.tank_pixmap, directions[self.direction][0]))
+        
     def shoot(self):
         if not self.shot_busy:
             bullet = Bullet(self, self.direction, pos=(self.row, self.col), parent=self.gameInterface)
@@ -607,9 +684,124 @@ class EnemyTank(QLabel):
 
     def destroyed(self):
         self.deleteLater()
+        chosenField[self.row][self.col] = 0
         self.gameInterface.enemies.remove(self)
+        if len(self.gameInterface.enemies) == 0:
+            self.gameInterface.main.end_state(True)
         self = None
+
+class EnemyTank1(EnemyTank):
+    def __init__(self, pos, parent=None):
+        super().__init__(pos, parent)
+
+        self.dir_list = ['north', 'east', 'south', 'west']
+
+        self.gameInterface = parent
+        self.direction = random.choices(self.dir_list)[0]
+        self.shot_busy = False
+        self.health = 1
+        self.speed = 1200
+        self.shot_freq = 1500
+        self.tank_pixmap = QPixmap(objects_pics["tankEnemy1"])
         
+        self.setPixmap(rotate_pixmap(self.tank_pixmap, directions[self.direction][0]))
+        scaling(self, 60, 60)
+        self.setScaledContents(True)
+        self.row, self.col = pos
+
+        self.move_timer = QTimer()
+        self.gameInterface.timers.append(self.move_timer)
+        self.shot_timer = QTimer()
+
+        self.move_timer.timeout.connect(self.move)
+        self.shot_timer.timeout.connect(self.shoot)
+        self.move_timer.start(self.speed)
+        self.shot_timer.start(self.shot_freq)
+
+class EnemyTank2(EnemyTank):
+    def __init__(self, pos, parent=None):
+        super().__init__(pos, parent)
+
+        self.dir_list = ['north', 'east', 'south', 'west']
+
+        self.gameInterface = parent
+        self.direction = random.choices(self.dir_list)[0]
+        self.shot_busy = False
+        self.health = 2
+        self.speed = 1000
+        self.shot_freq = 1200
+        self.tank_pixmap = QPixmap(objects_pics["tankEnemy2"])
+        
+        self.setPixmap(rotate_pixmap(self.tank_pixmap, directions[self.direction][0]))
+        scaling(self, 60, 60)
+        self.setScaledContents(True)
+        self.row, self.col = pos
+
+        self.move_timer = QTimer()
+        self.gameInterface.timers.append(self.move_timer)
+        self.shot_timer = QTimer()
+
+        self.move_timer.timeout.connect(self.move)
+        self.shot_timer.timeout.connect(self.shoot)
+        self.move_timer.start(self.speed)
+        self.shot_timer.start(self.shot_freq)
+
+class EnemyTank3(EnemyTank):
+    def __init__(self, pos, parent=None):
+        super().__init__(pos, parent)
+
+        self.dir_list = ['north', 'east', 'south', 'west']
+
+        self.gameInterface = parent
+        self.direction = random.choices(self.dir_list)[0]
+        self.shot_busy = False
+        self.health = 1
+        self.speed = 500
+        self.shot_freq = 1500
+        self.tank_pixmap = QPixmap(objects_pics["tankEnemy3"])
+        
+        self.setPixmap(rotate_pixmap(self.tank_pixmap, directions[self.direction][0]))
+        scaling(self, 60, 60)
+        self.setScaledContents(True)
+        self.row, self.col = pos
+
+        self.move_timer = QTimer()
+        self.gameInterface.timers.append(self.move_timer)
+        self.shot_timer = QTimer()
+
+        self.move_timer.timeout.connect(self.move)
+        self.shot_timer.timeout.connect(self.shoot)
+        self.move_timer.start(self.speed)
+        self.shot_timer.start(self.shot_freq)
+
+class EnemyTank4(EnemyTank):
+    def __init__(self, pos, parent=None):
+        super().__init__(pos, parent)
+
+        self.dir_list = ['north', 'east', 'south', 'west']
+
+        self.gameInterface = parent
+        self.direction = random.choices(self.dir_list)[0]
+        self.shot_busy = False
+        self.health = 3
+        self.speed = 2000
+        self.shot_freq = 2200
+        self.tank_pixmap = QPixmap(objects_pics["tankEnemy4"])
+        
+        self.setPixmap(rotate_pixmap(self.tank_pixmap, directions[self.direction][0]))
+        scaling(self, 60, 60)
+        self.setScaledContents(True)
+        self.row, self.col = pos
+
+        self.move_timer = QTimer()
+        self.gameInterface.timers.append(self.move_timer)
+        self.shot_timer = QTimer()
+
+        self.move_timer.timeout.connect(self.move)
+        self.shot_timer.timeout.connect(self.shoot)
+        self.move_timer.start(self.speed)
+        self.shot_timer.start(self.shot_freq)
+
 
 class ClickableImages(QLabel):
     def __init__(self, image, senderName, parent = None):    
@@ -635,9 +827,8 @@ class ClickableImages(QLabel):
         elif senderName == 'home':
             self.main.pagesStack.setCurrentIndex(0)
         elif senderName == 'replay':
-            self.main.pause.clear_layout()
-            # self.main.pagesStack.setCurrentIndex(self.main.pagesStack.count()-1)
-            # self.main.reset_game()
+            self.main.pagesStack.setCurrentIndex(self.main.pagesStack.count()-1)
+            self.main.reset_game()
         elif senderName == 'play':
             self.main.pagesStack.setCurrentIndex(self.main.pagesStack.count()-1)
             self.main.reset_game()
@@ -645,7 +836,7 @@ class ClickableImages(QLabel):
             self.main.close()
 
 
-def reset_game_state():
+def reset_game_state():  # Переприсваиваем field макет, чтобы перезапустить игру
     global field, chosenField
     field = read_from_json()
     if field is None:
@@ -653,7 +844,7 @@ def reset_game_state():
     chosenField = field.get(field_key, chosenField)
 
 
-def rotate_pixmap(pixmap, angle):
+def rotate_pixmap(pixmap, angle):  # Повернуть изображение под angle-углом
     rotated = QPixmap(pixmap)
     rotated.fill(Qt.GlobalColor.transparent)  # Прозрачный фон
     painter = QPainter(rotated)
@@ -665,14 +856,14 @@ def rotate_pixmap(pixmap, angle):
     return rotated
 
 
-def find_widget(layout, row, column):
+def find_widget(layout, row, column):  # Найти виджет в layout по координатам
     """Найти виджет по позиции (строка, колонка)"""
     item = layout.itemAtPosition(row, column)
     if item and item.widget():
         return item.widget()
 
 
-def get_widgets(layout):
+def get_widgets(layout):  # Получить виджет из layout
         """Получить все виджеты из QGridLayout"""
         widgets = []
         for i in range(layout.count()):
@@ -685,8 +876,7 @@ def get_widgets(layout):
                 print(f"Виджет: {widget}, Тип: {type(widget).__name__}")
 
 
-# ОЧИСТКА ТЕРМИНАЛА И ВЫВОД МАТРИЦЫ
-def show(self):
+def show():  # ОЧИСТКА ТЕРМИНАЛА И ВЫВОД МАТРИЦЫ
     os.system('cls' if os.name == 'nt' else 'clear')
     for i in chosenField:
         for j in i:
