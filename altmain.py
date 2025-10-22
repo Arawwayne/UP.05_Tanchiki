@@ -1,18 +1,9 @@
-import sys, json, time, random, os
+import sys, json, random, os
 from PyQt6.QtCore import Qt, QtMsgType, QPoint, qInstallMessageHandler, QTimer, QElapsedTimer
-from PyQt6.QtGui import QIcon, QPixmap, QPainter, QColor, QPalette, QGuiApplication, QTransform, QKeyEvent
+from PyQt6.QtGui import QIcon, QPixmap, QPainter, QColor, QPalette, QGuiApplication, QTransform, QKeyEvent, QFont
 from PyQt6.QtWidgets import (QApplication, QPushButton, QFrame, QLabel, QVBoxLayout, 
                              QWidget, QStackedWidget, QMainWindow, QHBoxLayout, QGridLayout,
                              QSpacerItem, QSizePolicy)
-
-
-"""
-3 макета карты, 
-4 усиления (вместе с картинками): неуязвимость на несколько секунд; пробивающие стены снаряды; двойной урон у снарядов; дополнительная жизнь.
-появление врагов с переодичностью в шесть секунд, 
-статистика боя, 
-пауза
-"""
 
 
 # Функция для чтения json файла, в котором находится макет (матрица) игрового поля
@@ -44,6 +35,10 @@ objects_pics = {
     "tankEnemy2": 'data/Enemy2.png',
     "tankEnemy3": 'data/Enemy3.png',
     "tankEnemy4": 'data/Enemy4.png',
+    'invincible': 'data/invincible.png',
+    'pierce': 'data/pierce.png',
+    'dd': 'data/dd.png',
+    'hp': 'data/hp.png',
 }
 
 solid_objects = {
@@ -52,21 +47,38 @@ solid_objects = {
     "unWall": 8,
     'base': 9, 
     "tankPlayer": 10, 
-    "bullet": 111,
+    "tankEnemy1": 11,
+    "tankEnemy2": 12,
+    "tankEnemy3": 13,
+    "tankEnemy4": 14,
 }
 
 nonsolid_objects = {
     'air': 0,
     'water': 3,
     'bush': 4,
+    'invincible': 21,
+    'pierce': 22,
+    'dd': 23,
+    'hp': 24,
 }
-
 
 enemies_objects = {
     "tankEnemy1": 11,
     "tankEnemy2": 12,
     "tankEnemy3": 13,
     "tankEnemy4": 14,
+    'invincible': 21,
+    'pierce': 22,
+    'dd': 23,
+    'hp': 24,
+}
+
+pickups_objects = {
+    'invincible': 21,
+    'pierce': 22,
+    'dd': 23,
+    'hp': 24,
 }
 
 # Картинки с ссылками на их изображения
@@ -103,16 +115,30 @@ actionKeys = {
     Qt.Key.Key_Space
 }
 
+stats = {
+    21: 0,
+    22: 0,
+    23: 0,
+    24: 0,
+    11: 0,
+    12: 0,
+    13: 0,
+    14: 0,
+}
+
+
 # Матрица поля 18 на 25
 rows = 18
 collumns = 25
 
 field = read_from_json()
 
-field_key = 'field1'
+field_keys = ['field1', 'field2', 'field3']
+field_enemies_keys = ["field1_enemies", "field2_enemies", "field3_enemies"]
+lvl = 0
 
-chosenField = field[field_key]
-
+chosenField = field[field_keys[lvl]]
+chosenEnemies = field[field_enemies_keys[lvl]]
 
 class WindowMain(QMainWindow):  # Класс главного окна или рамки, в которую мы будем вставлять виджет с формой меню или игрового интерфейса
     def __init__(self):
@@ -135,16 +161,20 @@ class WindowMain(QMainWindow):  # Класс главного окна или р
         self.menu = Menu(parent=self)
         self.pause = PauseScreen(parent=self)
         self.end = EndScreen(parent=self)
+        self.end_game = EndGame(parent=self)
         self.game = GameInterface(parent=self)
 
         self.pagesStack.addWidget(self.menu)
         self.pagesStack.addWidget(self.pause)
         self.pagesStack.addWidget(self.end)
+        self.pagesStack.addWidget(self.end_game)
         self.pagesStack.addWidget(self.game)
 
         # Вставляем стэк в рамку. Тк меню был введён в стэк первым, то оно и будет показываться
         self.setCentralWidget(self.pagesStack)
         self.pagesStack.setCurrentIndex(0)
+
+        self.paused = False
 
     def reset_game(self):
         reset_game_state()
@@ -162,11 +192,21 @@ class WindowMain(QMainWindow):  # Класс главного окна или р
         self.end = new_end
         self.pagesStack.insertWidget(2, self.end)
         self.pagesStack.setCurrentIndex(2)
-        
 
     def keyPressEvent(self, e):  # Обработка нажатия клавиш, которая передаётся в класс Tank
-        self.game.tank._keyPressEvent(e)
-        return super().keyPressEvent(e)
+        key = e.key()
+        if key == Qt.Key.Key_Escape :
+            match self.pagesStack.currentIndex():
+                case x if x == self.pagesStack.count() - 1:
+                    self.game._keyPressEvent(e)
+                    return super().keyPressEvent(e)
+                case x if x in [1, 2, 3]:
+                    self.pagesStack.setCurrentIndex(0)
+                case x if x == 0:
+                    self.close()
+        if not self.paused:
+            self.game.tank._keyPressEvent(e)
+            return super().keyPressEvent(e)
 
 
 class Menu(QWidget):  # Меню
@@ -238,17 +278,29 @@ class EndScreen(QWidget):  # Экран конца игры. Если побед
         frame_pickups.setMidLineWidth(3)
 
         frame_kills_layout = QVBoxLayout()
-        frame_kills_layout.addWidget(QLabel('TANK KILLS – 10000'))
-        frame_kills_layout.addWidget(QLabel('YOU WIN'))
-        frame_kills_layout.addWidget(QLabel('YAHOOOO'))
+        temp = QLabel('Уничтожено танков')
+        font = QFont()
+        font.setPointSize(30)
+        temp.setFont(font)
+        frame_kills_layout.addWidget(temp, alignment=Qt.AlignmentFlag.AlignCenter)
+        frame_kills_layout.addLayout(self.pics('tankEnemy1'))
+        frame_kills_layout.addLayout(self.pics('tankEnemy2'))
+        frame_kills_layout.addLayout(self.pics('tankEnemy3'))
+        frame_kills_layout.addLayout(self.pics('tankEnemy4'))
 
-        frame_layout = QVBoxLayout()
-        frame_layout.addWidget(QLabel('TANK KILLS – xd'))
-        frame_layout.addWidget(QLabel('YOU LOSE'))
-        frame_layout.addWidget(QLabel('WAHOOOO'))
+        frame_pickups_layout = QVBoxLayout()
+        temp = QLabel('Уничтожено танков')
+        font = QFont()
+        font.setPointSize(30)
+        temp.setFont(font)
+        frame_pickups_layout.addWidget(temp, alignment=Qt.AlignmentFlag.AlignCenter)
+        frame_pickups_layout.addLayout(self.pics('invincible'))
+        frame_pickups_layout.addLayout(self.pics('pierce'))
+        frame_pickups_layout.addLayout(self.pics('dd'))
+        frame_pickups_layout.addLayout(self.pics('hp'))
 
         frame_kills.setLayout(frame_kills_layout)
-        frame_pickups.setLayout(frame_layout)
+        frame_pickups.setLayout(frame_pickups_layout)
 
         # Кнопки
         homeButton = ClickableImages(self.home_pixmap, 'home', parent = self.main)
@@ -279,7 +331,7 @@ class EndScreen(QWidget):  # Экран конца игры. Если побед
             scaling(title, 1000, 200)       
             title.setScaledContents(True)
 
-            nextButton = ClickableImages(self.next_pixmap, "resume", parent = self.main)
+            nextButton = ClickableImages(self.next_pixmap, "next", parent = self.main)
             scaling(nextButton, 500, 500)
             nextButton.setScaledContents(True)
 
@@ -306,6 +358,21 @@ class EndScreen(QWidget):  # Экран конца игры. Если побед
                 elif child.self.mainLayout():
                     self.clear_layout(child.self.mainLayout())  # Рекурсия для вложенных layouts
 
+    def pics(self, id):
+        temp = QHBoxLayout()
+        temp1 = QLabel()
+        temp1.setPixmap(QPixmap(objects_pics[id]))
+        scaling(temp1, 60, 60)
+        temp1.setScaledContents(True)
+        temp.addWidget(temp1)
+
+        temp2 = QLabel(f'{stats[enemies_objects[id]]}')
+        font = QFont()
+        font.setPointSize(30)
+        temp2.setFont(font)
+        temp.addWidget(temp2)
+        temp.setSpacing(50)
+        return temp
 
 class PauseScreen(QWidget):  # Пауза
     def __init__(self, parent=None):
@@ -350,6 +417,44 @@ class PauseScreen(QWidget):  # Пауза
         mainLayout.addLayout(row2)
         self.setLayout(mainLayout)
 
+class EndGame(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+
+        self.main = parent
+
+        self.title_pixmap = QPixmap(pictures['win'])
+        self.exit_pixmap = QPixmap(pictures['home'])
+
+        mainLayout = QVBoxLayout()
+        row1 = QGridLayout()
+        row2 = QHBoxLayout()
+
+        title = QLabel()
+        title.setPixmap(self.title_pixmap)
+        scaling(title, 1000, 200)
+        title.setScaledContents(True)
+        
+        exitButton = ClickableImages(self.exit_pixmap, 'home', parent = self.main)
+        scaling(exitButton, 200, 200)
+        exitButton.setScaledContents(True)
+
+        row1.addWidget(title, 1, 0, alignment=Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop)
+        row1.addWidget(exitButton, 0, 0, alignment=Qt.AlignmentFlag.AlignRight)
+        
+        text = QLabel(
+        'Вы победили! Уровни кончились, поэтому можете выходить из игры. \n' \
+        'Либо же начать заного.'
+        )
+        font = QFont()
+        font.setPointSize(40)
+        text.setFont(font)
+
+        row2.addWidget(text, alignment=Qt.AlignmentFlag.AlignCenter)
+        
+        mainLayout.addLayout(row1)
+        mainLayout.addLayout(row2)
+        self.setLayout(mainLayout)
 
 class GameInterface(QWidget):  # Класс игрового интерфейса. Здесь будет очерчено игровое поле с помощью матрицы и UI по состоянию и возможностям игрока
     def __init__(self, parent = None):
@@ -357,16 +462,24 @@ class GameInterface(QWidget):  # Класс игрового интерфейс�
 
         self.fieldObjects = []
         self.fieldNonObjects = []
+        self.temp = []
         self.enemies = []
-        self.timers = []
-
-        self.pause_pixmap = QPixmap(pictures['pause'])
 
         self.main = parent
+        self.pause_pixmap = QPixmap(pictures['pause'])
+
+        self.spawn_timer = QTimer()
+        self.spawn_timer.timeout.connect(self.start_spawn)
+        self.execution = len(chosenEnemies)
+        self.enemy_all = self.execution
+        self.curExecution = 0
+        self.spawn_timer.start(4000)
+        
         mainLayout = QHBoxLayout()
         self.gameField = QGridLayout()
         self.gameField.setSpacing(0) 
         interface = QVBoxLayout()
+        
 
         # Сканируем матрицу и в соответствии с ней, отображаем объекты на поле
         for curRow in range(rows):
@@ -391,7 +504,7 @@ class GameInterface(QWidget):  # Класс игрового интерфейс�
                         self.fieldObjects.append(self.wall)
                     
                     case x if x == solid_objects['unWall']: 
-                        self.unWall = Wall3(parent=self)
+                        self.unWall = Wall3(pos=(curRow, curCol), parent=self)
                         self.gameField.addWidget(self.unWall, curRow, curCol)
                     
                     case x if x == nonsolid_objects['bush']:
@@ -404,7 +517,6 @@ class GameInterface(QWidget):  # Класс игрового интерфейс�
                         self.gameField.addWidget(self.water, curRow, curCol)
                         self.fieldNonObjects.append(self.water)
 
-
                     case x if x == solid_objects['base']:
                         base = QLabel()
                         base.setPixmap(QPixmap(objects_pics['base']))
@@ -415,36 +527,222 @@ class GameInterface(QWidget):  # Класс игрового интерфейс�
                         self.tank = Tank(pos=(curRow, curCol), parent=self) 
                         self.gameField.addWidget(self.tank, curRow, curCol)
 
-                    case x if x == enemies_objects['tankEnemy1']:
-                        self.enemy = EnemyTank1(pos=(curRow, curCol), parent=self)
+                    case x if x in list(enemies_objects.values()):
+                        match x:
+                            case y if y == enemies_objects['tankEnemy1']:
+                                self.enemy = EnemyTank1(pos=(curRow, curCol), parent=self)
+                            case y if y == enemies_objects['tankEnemy2']:
+                                self.enemy = EnemyTank2(pos=(curRow, curCol), parent=self)
+                            case y if y == enemies_objects['tankEnemy3']:
+                                self.enemy = EnemyTank3(pos=(curRow, curCol), parent=self)
+                            case y if y == enemies_objects['tankEnemy4']:
+                                self.enemy = EnemyTank4(pos=(curRow, curCol), parent=self)
                         self.gameField.addWidget(self.enemy, curRow, curCol)
                         self.enemies.append(self.enemy)
-                    
-                    case x if x == enemies_objects['tankEnemy2']:
-                        self.enemy2 = EnemyTank2(pos=(curRow, curCol), parent=self)
-                        self.gameField.addWidget(self.enemy2, curRow, curCol)
-                        self.enemies.append(self.enemy2)
-                
-                    case x if x == enemies_objects['tankEnemy3']:
-                        self.enemy3 = EnemyTank3(pos=(curRow, curCol), parent=self)
-                        self.gameField.addWidget(self.enemy3, curRow, curCol)
-                        self.enemies.append(self.enemy3)
+                        
+        # Кнопка паузы
+        self.pauseButton = ClickableImages(self.pause_pixmap, 'pause', parent = self.main)
+        scaling(self.pauseButton, 400, 180)
+        self.pauseButton.setScaledContents(True)
 
-                    case x if x == enemies_objects['tankEnemy4']:
-                        self.enemy4 = EnemyTank4(pos=(curRow, curCol), parent=self)
-                        self.gameField.addWidget(self.enemy4, curRow, curCol)
-                        self.enemies.append(self.enemy4)
+        # Фрейм с хп
+        self.health_frame = QFrame()
+        self.health_frame.setFrameStyle(QFrame.Shape.Box | QFrame.Shadow.Raised)
+        self.health_frame.setLineWidth(2)
+        self.health_frame.setMidLineWidth(3)
+        scaling(self.health_frame, 400, 200)
+        self.pauseButton.setScaledContents(True)
 
+        self.health_frame_layout = QHBoxLayout()
 
-        pauseButton = ClickableImages(self.pause_pixmap, 'pause', parent = self.main)
-        scaling(pauseButton, 200, 600)
-        pauseButton.setScaledContents(True)
-        interface.addWidget(pauseButton, alignment=Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop)
+        self.health = QLabel(f'{self.tank.health} ♥') 
+        font = QFont()
+        font.setPointSize(120)
+        self.health.setFont(font)
+
+        self.health_frame_layout.addWidget(self.health, alignment=Qt.AlignmentFlag.AlignCenter)
+        self.health_frame.setLayout(self.health_frame_layout)
+
+        # Фрейм с врагами
+        self.enemy_frame = QFrame()
+        self.enemy_frame.setFrameStyle(QFrame.Shape.Box | QFrame.Shadow.Raised)
+        self.enemy_frame.setLineWidth(2)
+        self.enemy_frame.setMidLineWidth(3)
+        scaling(self.enemy_frame, 400, 300)
+        self.pauseButton.setScaledContents(True)
+
+        self.enemy_frame_layout = QHBoxLayout()
+
+        self.enemy_count = QLabel(f'{self.enemy_all}')
+        font = QFont()
+        font.setPointSize(120)
+        self.enemy_count.setFont(font)
+
+        enemy_pic = QPixmap(objects_pics['tankEnemy1'])
+        enemy_pic_1 = QLabel()
+        enemy_pic_1.setPixmap(enemy_pic)
+        scaling(enemy_pic_1, 100, 100)
+        enemy_pic_1.setScaledContents(True)
+
+        self.enemy_frame_layout.addWidget(self.enemy_count, alignment=Qt.AlignmentFlag.AlignCenter)
+        self.enemy_frame_layout.addWidget(enemy_pic_1, alignment=Qt.AlignmentFlag.AlignCenter)
+        self.enemy_frame.setLayout(self.enemy_frame_layout)
+
+        # Фрейм с усилениями
+        self.pickups_frame = QFrame()
+        self.pickups_frame.setFrameStyle(QFrame.Shape.Box | QFrame.Shadow.Raised)
+        self.pickups_frame.setLineWidth(2)
+        self.pickups_frame.setMidLineWidth(3)
+        scaling(self.pickups_frame, 400, 300)
+        self.pauseButton.setScaledContents(True)
+
+        self.pickups_frame_layout = QHBoxLayout()
+        self.pickups_frame.setLayout(self.pickups_frame_layout)
+
+        interface.addWidget(self.pauseButton, alignment=Qt.AlignmentFlag.AlignTop)
+        interface.addWidget(self.health_frame, alignment=Qt.AlignmentFlag.AlignTop)
+        interface.addWidget(self.enemy_frame, alignment=Qt.AlignmentFlag.AlignTop)
+        interface.addWidget(self.pickups_frame, alignment=Qt.AlignmentFlag.AlignTop)
+
         
         mainLayout.addLayout(self.gameField)
         mainLayout.addLayout(interface)
         self.setLayout(mainLayout)
 
+
+    def health_update(self):
+        if not self.tank.invincible:
+            self.health.setText(f'{self.tank.health} ♥')
+        else:
+            self.health.setText(f'∞ ♥')
+
+    def enemy_update(self):
+        self.enemy_count.setText(f'{self.enemy_all}')
+
+    def pickups_update(self):
+        return
+
+    def start_spawn(self):
+        row, col = random.randint(1, 2), random.randint(1, 23)
+        if chosenField[row][col] == 0:
+            self.enemy = get_tank_id(chosenEnemies[self.curExecution])(pos=(row, col), parent=self)
+            chosenField[row][col] = self.enemy.id
+            self.gameField.addWidget(self.enemy, row, col)
+            self.enemies.append(self.enemy)
+            self.curExecution += 1
+            if self.curExecution == self.execution:
+                self.spawn_timer.stop()
+        else:
+            self.start_spawn()
+
+
+    def pause(self, paused):
+        if paused:
+            self.spawn_timer.stop()
+        else:
+            self.spawn_timer.start()
+        self.main.paused = paused
+        for enemy in self.enemies:
+            enemy.pause(paused)
+        for t in self.temp:
+            t.pause(paused)
+
+    def _keyPressEvent(self, e):
+        key = e.key()
+        self.pauseButton.on_click('pause')
+        
+
+class PickUp(QLabel):
+    def __init__(self, pos=None, parent=None):
+        super().__init__(parent)
+        self.gameInterface = parent
+        self.row, self.col = pos
+
+        QTimer().singleShot(10000, self.destroyed)
+
+    def pics(self, pic):
+        temp = QLabel()
+        temp.setPixmap(pic)
+        scaling(temp, 100, 100)
+        temp.setScaledContents(True)
+        self.gameInterface.pickups_frame_layout.addWidget(temp)
+        QTimer.singleShot(10000, lambda: self.gameInterface.pickups_frame_layout.removeWidget(temp))
+
+    def destroyed(self):
+        self.deleteLater()
+        self = None
+
+class Invincible(PickUp):
+    def __init__(self, pos=None, parent=None):
+        super().__init__(pos, parent)
+
+        self.inv_pixmap = QPixmap(objects_pics['invincible'])
+        self.setPixmap(self.inv_pixmap)
+        scaling(self, 45, 45)
+        self.setScaledContents(True)
+
+    def start(self):
+        self.gameInterface.tank.invincible = True
+        self.gameInterface.health_update()
+        QTimer.singleShot(10000, lambda: self.over())
+        stats[pickups_objects['invincible']] += 1
+        self.pics(self.inv_pixmap)
+        self.destroyed()
+    def over(self):
+        self.gameInterface.tank.invincible = False
+        self.gameInterface.health_update()
+    
+class Pierce(PickUp):
+    def __init__(self, pos=None, parent=None):
+        super().__init__(pos, parent)
+
+        self.inv_pixmap = QPixmap(objects_pics['pierce'])
+        self.setPixmap(self.inv_pixmap)
+        scaling(self, 45, 45)
+        self.setScaledContents(True)
+
+    def start(self):
+        self.gameInterface.tank.pierce = True
+        QTimer.singleShot(10000, lambda: self.over())
+        stats[pickups_objects['pierce']] += 1
+        self.pics(self.inv_pixmap)
+        self.destroyed()
+    def over(self):
+        self.gameInterface.tank.pierce = False
+ 
+class DoubleDamage(PickUp):
+    def __init__(self, pos=None, parent=None):
+        super().__init__(pos, parent)
+
+        self.inv_pixmap = QPixmap(objects_pics['dd'])
+        self.setPixmap(self.inv_pixmap)
+        scaling(self, 45, 45)
+        self.setScaledContents(True)
+
+    def start(self):
+        self.gameInterface.tank.dd = True
+        stats[pickups_objects['dd']] += 1
+        QTimer.singleShot(10000, lambda: self.over())
+        self.pics(self.inv_pixmap)
+        self.destroyed()
+    def over(self):
+        self.gameInterface.tank.dd = False
+        
+class HealthPoint(PickUp):
+    def __init__(self, pos=None, parent=None):
+        super().__init__(pos, parent)
+
+        self.inv_pixmap = QPixmap(objects_pics['hp'])
+        self.setPixmap(self.inv_pixmap)
+        scaling(self, 45, 45)
+        self.setScaledContents(True)
+
+    def start(self):
+        self.gameInterface.tank.health += 1
+        self.gameInterface.health_update()
+        stats[pickups_objects['hp']] += 1
+        self.destroyed()
+        
 
 class Bush(QLabel):
     def __init__(self, pos=None, parent=None):
@@ -456,7 +754,6 @@ class Bush(QLabel):
         self.setPixmap(self.bush_pixmap)
         scaling(self, 60, 60)
         self.setScaledContents(True)
-
 
 class Water(QLabel):
     def __init__(self, pos=None, parent=None):
@@ -476,15 +773,33 @@ class Wall(QLabel):
         self.gameInterface = parent
         self.row, self.col = pos
 
-    def health_down(self):
-        self.health -= 1
-        chosenField[self.row][self.col] = 0
+    def spawn_pickups(self):
+        pickups = ['invincible','pierce','dd','hp']
+        weights = [25, 10, 30, 40]
+
+        match random.choices(pickups, weights=weights, k=1)[0]:
+            case x if x == 'invincible':
+                self.pickup = Invincible(pos=(self.row, self.col), parent=self.gameInterface)
+            case x if x == 'pierce':
+                self.pickup = Pierce(pos=(self.row, self.col), parent=self.gameInterface)
+            case x if x == 'dd':
+                self.pickup = DoubleDamage(pos=(self.row, self.col), parent=self.gameInterface)
+            case x if x == 'hp':
+                self.pickup = HealthPoint(pos=(self.row, self.col), parent=self.gameInterface)
+        self.gameInterface.gameField.addWidget(self.pickup, self.row, self.col, alignment=Qt.AlignmentFlag.AlignCenter)
+        chosenField[self.row][self.col] = pickups_objects[x]
+
+    def health_down(self, dmg):
+        self.health -= dmg
         if self.health == 0:
+            chosenField[self.row][self.col] = 0
             self.destroyed()       
 
     def destroyed(self):
         self.deleteLater()
         self.gameInterface.fieldObjects.remove(self)
+        if random.random() < 0.05:
+            self.spawn_pickups()
         self = None
 
 class Wall1(Wall):
@@ -498,7 +813,7 @@ class Wall1(Wall):
         scaling(self, 60, 60)
         self.setScaledContents(True)
       
-class Wall2(QLabel):
+class Wall2(Wall):
     def __init__(self, pos, parent=None):
         super().__init__(pos, parent)
         self.health = 2
@@ -509,9 +824,9 @@ class Wall2(QLabel):
         scaling(self, 60, 60)
         self.setScaledContents(True)
 
-class Wall3(QLabel):
-    def __init__(self, parent=None):
-        super().__init__(parent)
+class Wall3(Wall):
+    def __init__(self, pos, parent=None):
+        super().__init__(pos, parent)
         self.wall_pixmap = QPixmap(objects_pics['unWall'])
         self.setPixmap(self.wall_pixmap)
         scaling(self, 60, 60)
@@ -527,15 +842,16 @@ class Tank(QLabel):
         self.shot_busy = False
         self.health = 3
         self.tank_pixmap = QPixmap(objects_pics['tankPlayer'])
+        self.dd = 1
+        self.pierce = False
+        self.dmg = 1 * self.dd
+        self.invincible = False
+        
         
         self.setPixmap(self.tank_pixmap)
         scaling(self, 60, 60)
         self.setScaledContents(True)
         self.row, self.col = pos
-
-        self.move_timer = QTimer()
-        self.move_timer.timeout.connect(lambda: self.move(self.direction))
-        self.gameInterface.timers.append(self.move_timer)
 
         self.cell_new = 0
 
@@ -543,9 +859,8 @@ class Tank(QLabel):
         self.setVisible(True)
         r, c = directions[direction][1]
         new_row, new_col = self.row + r, self.col + c
-
-
-        if (chosenField[new_row][new_col] in list(nonsolid_objects.values()) and chosenField[new_row][new_col] != nonsolid_objects['water']) and direction == self.direction:
+            
+        if (chosenField[new_row][new_col] not in list(solid_objects.values()) and chosenField[new_row][new_col] != nonsolid_objects['water']) and direction == self.direction:
             self.gameInterface.gameField.addWidget(self, new_row, new_col)
             chosenField[self.row][self.col] = self.cell_new
             self.cell_new = chosenField[new_row][new_col]
@@ -554,6 +869,10 @@ class Tank(QLabel):
 
         if self.cell_new == 4:
             self.setVisible(False)
+        elif self.cell_new in list(pickups_objects.values()):
+            pickup = find_widget(self.gameInterface.gameField, new_row, new_col)
+            pickup.start()
+            self.cell_new = 0
 
         self.setPixmap(rotate_pixmap(self.tank_pixmap, directions[direction][0]))
         self.direction = direction 
@@ -561,16 +880,24 @@ class Tank(QLabel):
 
     def shoot(self):
         if not self.shot_busy:
-            bullet = Bullet(self, self.direction, pos=(self.row, self.col), parent=self.gameInterface)
-            bullet._move()
+            bullet = Bullet(self, self.direction, pos=(self.row, self.col), dmg = self.dmg, pierce=self.pierce, parent=self.gameInterface)
+            self.shot_busy = True
 
     def health_down(self):
-        self.health -= 1
-        if self.health == 0:
-            self.destroyed()     
+        if not self.invincible:
+            self.health -= 1
+            self.gameInterface.health_update()
+            if self.health == 0:
+                self.destroyed()     
 
     def destroyed(self):
         self.gameInterface.main.end_state(False)
+
+    def pause(self, paused):
+        if paused:
+            self._keyPressEvent.__setattr__()
+        else:
+            self.setEnabled(True)
 
     def _keyPressEvent(self, e):
         key = e.key()
@@ -581,53 +908,61 @@ class Tank(QLabel):
 
 
 class Bullet(QLabel):
-    def __init__(self, owner, direction, pos, parent=None):
+    def __init__(self, owner, direction, pos, dmg, pierce=False, parent=None):
         super().__init__(parent)
 
         self.gameInterface = parent
         self.owner = owner
+        self.gameInterface.temp.append(self)
         self.direction = direction
         self.row, self.col = pos
         self.r, self.c = directions[self.direction][1]
         self.row, self.col = self.row + self.r, self.col + self.c
         self.speed = 50
         self.bullet_pixmap = QPixmap(objects_pics['bullet'])
+        self.pierce = pierce
+        self.dmg = dmg
 
         self.speed_timer = QTimer(self)
-        self.speed_timer.timeout.connect(self._move)                                                                                                                                                                                                                                                                                                                                                                
+        self.speed_timer.setObjectName('bullet')
+        self.speed_timer.timeout.connect(self._move)                                                                                                                                                                                                                                                                                                                                                            
 
         self.speed_timer.start(self.speed)  # CКОРОСТЬ ПУЛИ В МС
 
         self.setPixmap(rotate_pixmap(self.bullet_pixmap, directions[self.direction][0]))
         scaling(self, 30, 30)
         self.setScaledContents(True)
-        # self.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
     def _move(self):
         self.owner.shot_busy = True
         new_row, new_col = self.row, self.col
         if chosenField[new_row][new_col] in list(nonsolid_objects.values()):
             self.gameInterface.gameField.addWidget(self, new_row, new_col, alignment=Qt.AlignmentFlag.AlignCenter)
-            # chosenField[new_row][new_col] = 111
-            # chosenField[self.row][self.col] = 0
             self.row, self.col = self.row + self.r, self.col + self.c
             return
         else:
             self.collision(new_row, new_col)
 
     def collision(self, new_row, new_col):
+        if chosenField[new_row][new_col] == 9: 
+            self.gameInterface.main.end_state(False)
         if (widget := find_widget(self.gameInterface.gameField, new_row, new_col)) in self.gameInterface.fieldObjects:
-            widget.health_down()
+            widget.health_down(self.dmg)
         elif self.owner == self.gameInterface.tank:
             if (widget := find_widget(self.gameInterface.gameField, new_row, new_col)) in self.gameInterface.enemies:
-                widget.health_down()
+                widget.health_down(self.dmg)
         elif widget == self.gameInterface.tank:
             widget.health_down()
-        self.deleteLater()
-        self.owner.shot_busy = False
+        if self.pierce and chosenField[new_row][new_col] != 8:
+            pass
+        else:
+            self.owner.shot_busy = False
+            self.deleteLater()
+            self.gameInterface.temp.remove(self)
+
     
-    def pause(self, state: bool):
-        if state:
+    def pause(self, paused):
+        if paused:
             self.speed_timer.stop()
         else:
             self.speed_timer.start(self.speed)
@@ -640,6 +975,17 @@ class EnemyTank(QLabel):
         self.gameInterface = parent
         self.row, self.col = pos
         self.cell_new = 0
+        self.dgm = 1
+
+    def setup_timers(self):
+        self.move_timer = QTimer()
+        self.shot_timer = QTimer()
+
+    def start_timers(self, speed, freq):
+        self.move_timer.timeout.connect(self.move)
+        self.shot_timer.timeout.connect(self.shoot)
+        self.move_timer.start(speed)
+        self.shot_timer.start(freq)
 
     def move(self):
         self.setVisible(True)
@@ -650,11 +996,11 @@ class EnemyTank(QLabel):
         r, c = directions[self.direction][1]
         new_row, new_col = self.row + r, self.col + c
 
-        if (chosenField[new_row][new_col] in list(nonsolid_objects.values()) and chosenField[new_row][new_col] != nonsolid_objects['water']):
+        if (chosenField[new_row][new_col] not in list(solid_objects.values()) and chosenField[new_row][new_col] != nonsolid_objects['water'] and chosenField[new_row][new_col] not in list(pickups_objects.values())):
             self.gameInterface.gameField.addWidget(self, new_row, new_col)
             chosenField[self.row][self.col] = self.cell_new
             self.cell_new = chosenField[new_row][new_col]
-            chosenField[new_row][new_col] = 11
+            chosenField[new_row][new_col] = self.id
             self.row, self.col = new_row, new_col
         
         if self.cell_new == 4:
@@ -666,27 +1012,29 @@ class EnemyTank(QLabel):
         
     def shoot(self):
         if not self.shot_busy:
-            bullet = Bullet(self, self.direction, pos=(self.row, self.col), parent=self.gameInterface)
-            bullet._move()
+            bullet = Bullet(self, self.direction, pos=(self.row, self.col), dmg = self.dgm, parent=self.gameInterface)
 
-    def health_down(self):
-        self.health -= 1
+    def health_down(self, dmg):
+        self.health -= dmg
         if self.health == 0:
             self.destroyed()       
 
-    def pause(self, state):
-        if state:
+    def pause(self, paused):
+        if paused:
             self.move_timer.stop()
             self.shot_timer.stop()
         else:
-            self.move_timer.start(self.speed)
-            self.shot_timer.start(self.shot_freq)
+            self.move_timer.start()
+            self.shot_timer.start()
 
     def destroyed(self):
+        stats[self.id] += 1
         self.deleteLater()
         chosenField[self.row][self.col] = 0
         self.gameInterface.enemies.remove(self)
-        if len(self.gameInterface.enemies) == 0:
+        self.gameInterface.enemy_all -= 1
+        self.gameInterface.enemy_update()
+        if self.gameInterface.enemy_all == 0:
             self.gameInterface.main.end_state(True)
         self = None
 
@@ -703,20 +1051,15 @@ class EnemyTank1(EnemyTank):
         self.speed = 1200
         self.shot_freq = 1500
         self.tank_pixmap = QPixmap(objects_pics["tankEnemy1"])
+        self.id = enemies_objects['tankEnemy1']
         
         self.setPixmap(rotate_pixmap(self.tank_pixmap, directions[self.direction][0]))
         scaling(self, 60, 60)
         self.setScaledContents(True)
         self.row, self.col = pos
-
-        self.move_timer = QTimer()
-        self.gameInterface.timers.append(self.move_timer)
-        self.shot_timer = QTimer()
-
-        self.move_timer.timeout.connect(self.move)
-        self.shot_timer.timeout.connect(self.shoot)
-        self.move_timer.start(self.speed)
-        self.shot_timer.start(self.shot_freq)
+    
+        self.setup_timers()
+        self.start_timers(self.speed, self.shot_freq)
 
 class EnemyTank2(EnemyTank):
     def __init__(self, pos, parent=None):
@@ -731,20 +1074,15 @@ class EnemyTank2(EnemyTank):
         self.speed = 1000
         self.shot_freq = 1200
         self.tank_pixmap = QPixmap(objects_pics["tankEnemy2"])
+        self.id = enemies_objects['tankEnemy2']
         
         self.setPixmap(rotate_pixmap(self.tank_pixmap, directions[self.direction][0]))
         scaling(self, 60, 60)
         self.setScaledContents(True)
         self.row, self.col = pos
 
-        self.move_timer = QTimer()
-        self.gameInterface.timers.append(self.move_timer)
-        self.shot_timer = QTimer()
-
-        self.move_timer.timeout.connect(self.move)
-        self.shot_timer.timeout.connect(self.shoot)
-        self.move_timer.start(self.speed)
-        self.shot_timer.start(self.shot_freq)
+        self.setup_timers()
+        self.start_timers(self.speed, self.shot_freq)
 
 class EnemyTank3(EnemyTank):
     def __init__(self, pos, parent=None):
@@ -759,20 +1097,15 @@ class EnemyTank3(EnemyTank):
         self.speed = 500
         self.shot_freq = 1500
         self.tank_pixmap = QPixmap(objects_pics["tankEnemy3"])
+        self.id = enemies_objects['tankEnemy3']
         
         self.setPixmap(rotate_pixmap(self.tank_pixmap, directions[self.direction][0]))
         scaling(self, 60, 60)
         self.setScaledContents(True)
         self.row, self.col = pos
 
-        self.move_timer = QTimer()
-        self.gameInterface.timers.append(self.move_timer)
-        self.shot_timer = QTimer()
-
-        self.move_timer.timeout.connect(self.move)
-        self.shot_timer.timeout.connect(self.shoot)
-        self.move_timer.start(self.speed)
-        self.shot_timer.start(self.shot_freq)
+        self.setup_timers()
+        self.start_timers(self.speed, self.shot_freq)
 
 class EnemyTank4(EnemyTank):
     def __init__(self, pos, parent=None):
@@ -787,20 +1120,15 @@ class EnemyTank4(EnemyTank):
         self.speed = 2000
         self.shot_freq = 2200
         self.tank_pixmap = QPixmap(objects_pics["tankEnemy4"])
+        self.id = enemies_objects['tankEnemy4']
         
         self.setPixmap(rotate_pixmap(self.tank_pixmap, directions[self.direction][0]))
         scaling(self, 60, 60)
         self.setScaledContents(True)
         self.row, self.col = pos
 
-        self.move_timer = QTimer()
-        self.gameInterface.timers.append(self.move_timer)
-        self.shot_timer = QTimer()
-
-        self.move_timer.timeout.connect(self.move)
-        self.shot_timer.timeout.connect(self.shoot)
-        self.move_timer.start(self.speed)
-        self.shot_timer.start(self.shot_freq)
+        self.setup_timers()
+        self.start_timers(self.speed, self.shot_freq)
 
 
 class ClickableImages(QLabel):
@@ -819,29 +1147,63 @@ class ClickableImages(QLabel):
             self.on_click(self.senderName)  # Вызываем свою функцию
 
     def on_click(self, senderName):
+        global lvl
         if senderName == 'pause':
             self.main.pagesStack.setCurrentIndex(1)
-            #self.main.game.
+            self.main.game.pause(paused=True)
         elif senderName == 'resume':
             self.main.pagesStack.setCurrentIndex(self.main.pagesStack.count()-1)
+            self.main.game.pause(paused=False)
         elif senderName == 'home':
             self.main.pagesStack.setCurrentIndex(0)
         elif senderName == 'replay':
             self.main.pagesStack.setCurrentIndex(self.main.pagesStack.count()-1)
             self.main.reset_game()
+            self.main.game.pause(paused=False)
         elif senderName == 'play':
+            if self.main.pagesStack.currentIndex() == 3:
+                lvl = 0
             self.main.pagesStack.setCurrentIndex(self.main.pagesStack.count()-1)
             self.main.reset_game()
+        elif senderName == 'next':
+            lvl += 1
+            if lvl == 3:
+                 self.main.pagesStack.setCurrentIndex(3)
+            else:
+                self.main.pagesStack.setCurrentIndex(self.main.pagesStack.count()-1)
+                self.main.reset_game()
         elif senderName == 'exit':
             self.main.close()
 
 
+def get_tank_id(id):
+    match id:
+        case x if x == enemies_objects['tankEnemy1']:
+            return EnemyTank1
+        case x if x == enemies_objects['tankEnemy2']:
+            return EnemyTank2
+        case x if x == enemies_objects['tankEnemy3']:
+            return EnemyTank3
+        case x if x == enemies_objects['tankEnemy4']:
+            return EnemyTank4
+
+
 def reset_game_state():  # Переприсваиваем field макет, чтобы перезапустить игру
-    global field, chosenField
+    global field, chosenField, stats
+    stats = {
+        21: 0,
+        22: 0,
+        23: 0,
+        24: 0,
+        11: 0,
+        12: 0,
+        13: 0,
+        14: 0,
+    }
     field = read_from_json()
     if field is None:
         return
-    chosenField = field.get(field_key, chosenField)
+    chosenField = field.get(field_keys[lvl], chosenField)
 
 
 def rotate_pixmap(pixmap, angle):  # Повернуть изображение под angle-углом
@@ -861,19 +1223,6 @@ def find_widget(layout, row, column):  # Найти виджет в layout по 
     item = layout.itemAtPosition(row, column)
     if item and item.widget():
         return item.widget()
-
-
-def get_widgets(layout):  # Получить виджет из layout
-        """Получить все виджеты из QGridLayout"""
-        widgets = []
-        for i in range(layout.count()):
-            item = layout.itemAt(i)
-            if item.widget():
-                widgets.append(item.widget())
-        print(f"Найдено виджетов: {len(widgets)}")
-        for widget in widgets:
-            if type(widget).__name__ == 'Tank':
-                print(f"Виджет: {widget}, Тип: {type(widget).__name__}")
 
 
 def show():  # ОЧИСТКА ТЕРМИНАЛА И ВЫВОД МАТРИЦЫ
