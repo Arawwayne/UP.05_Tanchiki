@@ -684,7 +684,10 @@ class Invincible(PickUp):
     def over(self):
         self.gameInterface.tank.invincible = False
         self.gameInterface.health_update()
-        self.gameInterface.pickups_frame_layout.removeWidget(self.temp)
+        try:
+            self.gameInterface.pickups_frame_layout.removeWidget(self.temp)
+        except:
+            return
     
 class Pierce(PickUp):
     def __init__(self, pos=None, parent=None):
@@ -703,7 +706,10 @@ class Pierce(PickUp):
         self.destroyed()
     def over(self):
         self.gameInterface.tank.pierce = False
-        self.gameInterface.pickups_frame_layout.removeWidget(self.temp)
+        try:
+            self.gameInterface.pickups_frame_layout.removeWidget(self.temp)
+        except:
+            return
  
 class DoubleDamage(PickUp):
     def __init__(self, pos=None, parent=None):
@@ -722,7 +728,10 @@ class DoubleDamage(PickUp):
         self.destroyed()
     def over(self):
         self.gameInterface.tank.dmg -= 1
-        self.gameInterface.pickups_frame_layout.removeWidget(self.temp)
+        try:
+            self.gameInterface.pickups_frame_layout.removeWidget(self.temp)
+        except:
+            return
         
 class HealthPoint(PickUp):
     def __init__(self, pos=None, parent=None):
@@ -794,7 +803,7 @@ class Wall(QLabel):
     def destroyed(self):
         self.deleteLater()
         self.gameInterface.fieldObjects.remove(self)
-        if random.random() < 1.05:
+        if random.random() < 0.05:
             self.spawn_pickups()
         self = None
 
