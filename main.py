@@ -485,14 +485,6 @@ class GameInterface(QWidget):  # Класс игрового интерфейс�
         for curRow in range(rows):
             for curCol in range(collumns):
                 match chosenField[curRow][curCol]:
-                    # case 0: 
-                    #     self.space = QLabel()
-                    #     self.space.setPixmap(objects_pics["air"][1])
-                    #     scaling(self.space, 60, 60)
-                    #     self.space.setScaledContents(True)
-                    #     # space = QSpacerItem(60, 60, QSizePolicy.Policy.Fixed)
-                    #     self.gameField.addWidget(self.space, curRow, curCol)
-                    
                     case x if x == solid_objects['wall1']: 
                         self.wall = Wall1(pos=(curRow, curCol), parent=self)
                         self.gameField.addWidget(self.wall, curRow, curCol)
@@ -872,10 +864,6 @@ class Tank(QLabel):
 
         if self.cell_new == 4:
             self.setVisible(False)
-        # elif self.cell_new in list(pickups_objects.values()):
-        #     pickup = find_widget(self.gameInterface.gameField, new_row, new_col)
-        #     pickup.start()
-        #     self.cell_new = 0
 
         self.setPixmap(rotate_pixmap(self.tank_pixmap, directions[direction][0]))
         self.direction = direction 
@@ -1008,8 +996,6 @@ class EnemyTank(QLabel):
         
         if self.cell_new == 4:
             self.setVisible(False)
-        # elif chosenField[new_row][new_col] in list(solid_objects.values()):
-        #     self.setPixmap(rotate_pixmap(QPixmap(objects_pics["tankEnemy"]), directions[self.dir_list[self.dir_list.index(self.direction) - 1]][0]))
 
         self.setPixmap(rotate_pixmap(self.tank_pixmap, directions[self.direction][0]))
         
