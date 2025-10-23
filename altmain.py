@@ -154,7 +154,7 @@ class WindowMain(QMainWindow):  # Класс главного окна или р
         self.setWindowIcon(QIcon('data/logo.ico'))
         #self.setFixedSize(screen_width, screen_height)
 
-        self.pagesStack = QStackedWidget()
+        self.pagesStack = QStackedWidget()  
         self.pagesStack.setFixedSize(screen_width, screen_height)
 
         # Определяем формы и вносим их в стэк
@@ -289,7 +289,7 @@ class EndScreen(QWidget):  # Экран конца игры. Если побед
         frame_kills_layout.addLayout(self.pics('tankEnemy4'))
 
         frame_pickups_layout = QVBoxLayout()
-        temp = QLabel('Уничтожено танков')
+        temp = QLabel('Подобрано усилений')
         font = QFont()
         font.setPointSize(30)
         temp.setFont(font)
@@ -473,7 +473,7 @@ class GameInterface(QWidget):  # Класс игрового интерфейс�
         self.execution = len(chosenEnemies)
         self.enemy_all = self.execution
         self.curExecution = 0
-        self.spawn_timer.start(4000)
+        self.spawn_timer.start(5000)
         
         mainLayout = QHBoxLayout()
         self.gameField = QGridLayout()
@@ -720,13 +720,13 @@ class DoubleDamage(PickUp):
         self.setScaledContents(True)
 
     def start(self):
-        self.gameInterface.tank.dd = True
+        self.gameInterface.tank.dmg += 1
         stats[pickups_objects['dd']] += 1
         QTimer.singleShot(10000, lambda: self.over())
         self.pics(self.inv_pixmap)
         self.destroyed()
     def over(self):
-        self.gameInterface.tank.dd = False
+        self.gameInterface.tank.dmg -= 1
         
 class HealthPoint(PickUp):
     def __init__(self, pos=None, parent=None):
@@ -791,7 +791,7 @@ class Wall(QLabel):
 
     def health_down(self, dmg):
         self.health -= dmg
-        if self.health == 0:
+        if self.health <= 0:
             chosenField[self.row][self.col] = 0
             self.destroyed()       
 
@@ -842,9 +842,8 @@ class Tank(QLabel):
         self.shot_busy = False
         self.health = 3
         self.tank_pixmap = QPixmap(objects_pics['tankPlayer'])
-        self.dd = 1
         self.pierce = False
-        self.dmg = 1 * self.dd
+        self.dmg = 1
         self.invincible = False
         
         
@@ -861,6 +860,10 @@ class Tank(QLabel):
         new_row, new_col = self.row + r, self.col + c
             
         if (chosenField[new_row][new_col] not in list(solid_objects.values()) and chosenField[new_row][new_col] != nonsolid_objects['water']) and direction == self.direction:
+            if chosenField[new_row][new_col] in list(pickups_objects.values()):
+                pickup = find_widget(self.gameInterface.gameField, new_row, new_col)
+                if hasattr(pickup, 'inv_pixmap') == True:
+                    pickup.start()
             self.gameInterface.gameField.addWidget(self, new_row, new_col)
             chosenField[self.row][self.col] = self.cell_new
             self.cell_new = chosenField[new_row][new_col]
@@ -869,10 +872,10 @@ class Tank(QLabel):
 
         if self.cell_new == 4:
             self.setVisible(False)
-        elif self.cell_new in list(pickups_objects.values()):
-            pickup = find_widget(self.gameInterface.gameField, new_row, new_col)
-            pickup.start()
-            self.cell_new = 0
+        # elif self.cell_new in list(pickups_objects.values()):
+        #     pickup = find_widget(self.gameInterface.gameField, new_row, new_col)
+        #     pickup.start()
+        #     self.cell_new = 0
 
         self.setPixmap(rotate_pixmap(self.tank_pixmap, directions[direction][0]))
         self.direction = direction 
@@ -887,8 +890,8 @@ class Tank(QLabel):
         if not self.invincible:
             self.health -= 1
             self.gameInterface.health_update()
-            if self.health == 0:
-                self.destroyed()     
+            if self.health <= 0:
+                self.destroyed()
 
     def destroyed(self):
         self.gameInterface.main.end_state(False)
@@ -1016,7 +1019,7 @@ class EnemyTank(QLabel):
 
     def health_down(self, dmg):
         self.health -= dmg
-        if self.health == 0:
+        if self.health <= 0:
             self.destroyed()       
 
     def pause(self, paused):
@@ -1161,8 +1164,7 @@ class ClickableImages(QLabel):
             self.main.reset_game()
             self.main.game.pause(paused=False)
         elif senderName == 'play':
-            if self.main.pagesStack.currentIndex() == 3:
-                lvl = 0
+            lvl = 0
             self.main.pagesStack.setCurrentIndex(self.main.pagesStack.count()-1)
             self.main.reset_game()
         elif senderName == 'next':
@@ -1189,7 +1191,7 @@ def get_tank_id(id):
 
 
 def reset_game_state():  # Переприсваиваем field макет, чтобы перезапустить игру
-    global field, chosenField, stats
+    global field, chosenField, stats, chosenEnemies
     stats = {
         21: 0,
         22: 0,
@@ -1204,6 +1206,7 @@ def reset_game_state():  # Переприсваиваем field макет, чт
     if field is None:
         return
     chosenField = field.get(field_keys[lvl], chosenField)
+    chosenEnemies = field[field_enemies_keys[lvl]]
 
 
 def rotate_pixmap(pixmap, angle):  # Повернуть изображение под angle-углом
