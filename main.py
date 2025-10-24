@@ -1166,6 +1166,7 @@ class ClickableImages(QLabel):
             lvl = 0
             self.main.pagesStack.setCurrentIndex(self.main.pagesStack.count()-1)
             self.main.reset_game()
+            self.main.game.pause(paused=False)
         elif senderName == 'next':
             lvl += 1
             if lvl == 3:
