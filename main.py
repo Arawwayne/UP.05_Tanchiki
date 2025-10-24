@@ -152,7 +152,6 @@ class WindowMain(QMainWindow):  # Класс главного окна или р
         paletTe.setColor(QPalette.ColorRole.Window, QColor("#353232"))
         self.setPalette(paletTe)
         self.setWindowIcon(QIcon('data/logo.ico'))
-        #self.setFixedSize(screen_width, screen_height)
 
         self.pagesStack = QStackedWidget()  
         self.pagesStack.setFixedSize(screen_width, screen_height)
@@ -266,13 +265,13 @@ class EndScreen(QWidget):  # Экран конца игры. Если побед
         
         # Фреймы со статистикой
         frame_kills = QFrame()
-        frame_kills.setFixedSize(600, 600)
+        scaling(frame_kills, 600, 600)
         frame_kills.setFrameStyle(QFrame.Shape.Box | QFrame.Shadow.Raised)
         frame_kills.setLineWidth(2)
         frame_kills.setMidLineWidth(3)
 
         frame_pickups = QFrame()
-        frame_pickups.setFixedSize(600, 600)
+        scaling(frame_pickups, 600, 600)
         frame_pickups.setFrameStyle(QFrame.Shape.Box | QFrame.Shadow.Raised)
         frame_pickups.setLineWidth(2)
         frame_pickups.setMidLineWidth(3)
