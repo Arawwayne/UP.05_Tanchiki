@@ -604,7 +604,10 @@ class GameInterface(QWidget):  # Класс игрового интерфейс�
 
     def health_update(self):
         if not self.tank.invincible:
-            self.health.setText(f'{self.tank.health} ♥')
+            try:
+                self.health.setText(f'{self.tank.health} ♥')
+            except:
+                return
         else:
             self.health.setText(f'∞ ♥')
 
@@ -780,7 +783,7 @@ class Wall(QLabel):
 
     def spawn_pickups(self):
         pickups = ['invincible','pierce','dd','hp']
-        weights = [25, 10, 30, 40]
+        weights = [20, 10, 30, 40]
 
         match random.choices(pickups, weights=weights, k=1)[0]:
             case x if x == 'invincible':
